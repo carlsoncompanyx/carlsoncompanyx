@@ -1,8 +1,6 @@
 import { DemoResponse } from "@shared/api";
 import { useEffect, useState } from "react";
 
-import { DemoResponse } from "@shared/api";
-import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import StatsCard from "@/components/StatsCard";
 import ChartPlaceholder from "@/components/ChartPlaceholder";
