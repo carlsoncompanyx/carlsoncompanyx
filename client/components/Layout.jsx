@@ -102,7 +102,7 @@ export default function Layout({ children }) {
         </div>
 
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-slate-200 bg-white/95 backdrop-blur-xl">
+          <div className="md:hidden border-t border-slate-200 bg-white/95 backdrop-blur-xl">
             <nav className="max-w-7xl mx-auto px-4 py-4 space-y-1">
               {navigationItems.map((item) => (
                 <Link
