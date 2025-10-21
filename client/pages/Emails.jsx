@@ -1,6 +1,4 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,69 +7,22 @@ import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Emails() {
-  const queryClient = useQueryClient();
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [message, setMessage] = useState(null);
 
-  const { data: emails = [] } = useQuery({
-    queryKey: ['emails'],
-    queryFn: () => base44.entities.Email.list("-received_date"),
-  });
-
-  const updateEmailMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Email.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['emails'] });
-    },
-  });
-
-  const deleteEmailMutation = useMutation({
-    mutationFn: (id) => base44.entities.Email.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['emails'] });
-      setSelectedEmail(null);
-      setMessage({ type: "success", text: "Email deleted successfully" });
-    },
-  });
+  // Sample local emails (no external calls)
+  const [emails, setEmails] = useState([
+    { id: '1', from_name: 'Alice', from_email: 'alice@example.com', subject: 'Proposal', body: 'Hey — please review the attached proposal.', received_date: new Date().toISOString(), is_read: false, is_archived: false, resume_url: null, message_id: 'm1' },
+    { id: '2', from_name: 'Bob', from_email: 'bob@example.com', subject: 'Invoice', body: 'Invoice for last month attached.', received_date: new Date().toISOString(), is_read: true, is_archived: false, resume_url: null, message_id: 'm2' },
+  ]);
 
   const sendActionToN8n = async (email, action, body = null) => {
-    if (!email.resume_url) {
-      throw new Error("No resume URL available for this email");
-    }
-
-    const payload = {
-      action: action,
-      message_id: email.message_id
-    };
-
-    if (body) {
-      payload.body = body;
-    }
-
-    console.log('Sending to n8n:', email.resume_url, payload);
-
-    try {
-      const response = await fetch(email.resume_url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        mode: 'cors'
-      });
-
-      if (!response.ok) {
-        throw new Error(`n8n returned status ${response.status}`);
-      }
-
-      return response;
-    } catch (error) {
-      console.error('n8n webhook error:', error);
-      throw error;
-    }
+    // In standalone mode we simulate success
+    console.log('Simulated n8n call for', action, email.id, body);
+    return Promise.resolve({ ok: true });
   };
 
   const handleSelectEmail = (email) => {
@@ -80,17 +31,9 @@ export default function Emails() {
     setReplyText("");
     setMessage(null);
 
-    // Check if resume_url exists
-    if (!email.resume_url) {
-      setMessage({
-        type: "error",
-        text: "This email doesn't have a resume URL. Actions won't work."
-      });
-    }
-
-    // Mark as read in UI only
+    // Mark as read in local state
     if (!email.is_read) {
-      updateEmailMutation.mutate({ id: email.id, data: { ...email, is_read: true } });
+      setEmails((prev) => prev.map((e) => (e.id === email.id ? { ...e, is_read: true } : e)));
     }
   };
 
@@ -102,18 +45,12 @@ export default function Emails() {
 
     try {
       await sendActionToN8n(email, 'archive');
-      updateEmailMutation.mutate({
-        id: email.id,
-        data: { ...email, is_archived: true }
-      });
+      setEmails((prev) => prev.map((e) => (e.id === email.id ? { ...e, is_archived: true } : e)));
       setSelectedEmail(null);
       setMessage({ type: "success", text: "Email archived successfully" });
     } catch (error) {
       console.error("Failed to archive:", error);
-      setMessage({
-        type: "error",
-        text: `Failed to archive email: ${error.message}. Check console for details.`
-      });
+      setMessage({ type: "error", text: `Failed to archive email: ${error.message}.` });
     }
   };
 
@@ -129,13 +66,12 @@ export default function Emails() {
 
     try {
       await sendActionToN8n(email, 'delete');
-      deleteEmailMutation.mutate(email.id);
+      setEmails((prev) => prev.filter((e) => e.id !== email.id));
+      setSelectedEmail(null);
+      setMessage({ type: "success", text: "Email deleted" });
     } catch (error) {
       console.error("Failed to delete:", error);
-      setMessage({
-        type: "error",
-        text: `Failed to delete email: ${error.message}. Check console for details.`
-      });
+      setMessage({ type: "error", text: `Failed to delete email: ${error.message}.` });
     }
   };
 
@@ -157,16 +93,13 @@ export default function Emails() {
       setMessage({ type: "success", text: "Reply sent successfully!" });
     } catch (error) {
       console.error("Failed to send reply:", error);
-      setMessage({
-        type: "error",
-        text: `Failed to send reply: ${error.message}. Check console for details.`
-      });
+      setMessage({ type: "error", text: `Failed to send reply: ${error.message}.` });
     }
 
     setIsSending(false);
   };
 
-  const activeEmails = emails.filter(e => !e.is_archived);
+  const activeEmails = emails.filter((e) => !e.is_archived);
 
   return (
     <div className="space-y-8">
