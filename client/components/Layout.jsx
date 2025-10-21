@@ -45,7 +45,7 @@ export default function Layout({ children }) {
               <img
                 src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e8eda219e135b5d9dd26c4/73932103f_CarlsonCompanyBanner.jpeg"
                 alt="Carlson Company"
-                className="h-17 w-auto transition-transform duration-300 group-hover:scale-95"
+                className="h-16 w-auto transition-transform duration-300 group-hover:scale-95"
               />
             </Link>
 
