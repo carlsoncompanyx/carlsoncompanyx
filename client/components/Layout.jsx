@@ -49,7 +49,7 @@ export default function Layout({ children }) {
               />
             </Link>
 
-            <nav className="hidden lg:flex items-center gap-2 bg-white/80 p-1 rounded-md">
+            <nav className="hidden md:flex items-center gap-2 bg-white/80 p-1 rounded-md">
               {navigationItems.map((item) => {
                 const isActive = location.pathname === item.url;
                 const Icon = item.icon;
