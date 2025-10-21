@@ -49,7 +49,7 @@ export default function Layout({ children }) {
               />
             </Link>
 
-            <nav className="hidden lg:flex items-center gap-1">
+            <nav className="hidden lg:flex items-center gap-2 bg-white/80 p-1 rounded-md">
               {navigationItems.map((item) => {
                 const isActive = location.pathname === item.url;
                 const Icon = item.icon;
@@ -64,7 +64,7 @@ export default function Layout({ children }) {
                     <Icon className="w-4 h-4" />
                     {item.title}
                     {item.badge ? (
-                      <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] px-2 py-0.5">{item.badge}</span>
+                      <span className="absolute -top-1 -right-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] px-2 py-0.5">{item.badge}</span>
                     ) : null}
                   </Link>
                 );
@@ -73,7 +73,7 @@ export default function Layout({ children }) {
               <div className="relative" onMouseEnter={() => setToolsOpen(true)} onMouseLeave={() => setToolsOpen(false)}>
                 <button onClick={() => setToolsOpen((v) => !v)} className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
                   <Wrench className="w-4 h-4" />
-                  Tools
+                  <span>Tools</span>
                   <ChevronDown className="w-3 h-3" />
                   {toolNotifications > 0 && (
                     <span className="absolute -top-1 -right-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] px-2 py-0.5">{toolNotifications}</span>
