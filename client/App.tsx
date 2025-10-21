@@ -11,7 +11,6 @@ import Home from "./pages/Home";
 import Finances from "./pages/Finances";
 import Metrics from "./pages/Metrics";
 import Emails from "./pages/Emails";
-import Dashboard from "./pages/Dashboard";
 import ShortsGenerator from "./pages/ShortsGenerator";
 import ProductCreator from "./pages/ProductCreator";
 import Settings from "./pages/Settings";
