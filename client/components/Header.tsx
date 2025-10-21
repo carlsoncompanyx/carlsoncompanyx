@@ -4,13 +4,13 @@ import { Link } from "react-router-dom";
 export default function Header() {
   return (
     <header className="w-full bg-white border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link to="/Home" className="flex items-center gap-3">
             <img
               src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e8eda219e135b5d9dd26c4/73932103f_CarlsonCompanyBanner.jpeg"
               alt="Carlson Company"
-              className="h-12 object-contain"
+              className="h-16 object-contain"
             />
           </Link>
         </div>
