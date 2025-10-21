@@ -43,9 +43,9 @@ export default function Layout({ children }) {
           <div className="flex items-center justify-between h-20">
             <Link to={createPageUrl("Home")} className="flex items-center group">
               <img
-                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e8eda219e135b5d9dd26c4/73932103f_CarlsonCompanyBanner.jpeg"
+                src="https://ckqphrogexyzhwifuksr.supabase.co/storage/v1/object/sign/imagescarlsoncompany/CarlsonCompany%20Banner%20Upscaled.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNWFlNDM3Ny1hY2YyLTRmMWEtOWEwZS00NWU5MTJjOTE1YjkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJpbWFnZXNjYXJsc29uY29tcGFueS9DYXJsc29uQ29tcGFueSBCYW5uZXIgVXBzY2FsZWQucG5nIiwiaWF0IjoxNzYxMDc5NDkyLCJleHAiOjI3MDcxNTk0OTJ9.xD7hBpzKPEGO650PD1EL9vZWR8AC7Iby0cyK_Vs-9eg"
                 alt="Carlson Company"
-                className="h-16 w-auto transition-transform duration-300 group-hover:scale-95"
+                className="h-12 w-auto transition-transform duration-300 group-hover:scale-95"
               />
             </Link>
 
