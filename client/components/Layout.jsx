@@ -93,7 +93,7 @@ export default function Layout({ children }) {
             </nav>
 
             <button
-              className="lg:hidden inline-flex items-center justify-center p-2 rounded-md text-slate-700 hover:text-slate-900"
+              className="md:hidden inline-flex items-center justify-center p-2 rounded-md text-slate-700 hover:text-slate-900"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
