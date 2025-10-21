@@ -70,8 +70,8 @@ export default function Layout({ children }) {
                 );
               })}
 
-              <div className="relative">
-                <button className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
+              <div className="relative" onMouseEnter={() => setToolsOpen(true)} onMouseLeave={() => setToolsOpen(false)}>
+                <button onClick={() => setToolsOpen((v) => !v)} className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
                   <Wrench className="w-4 h-4" />
                   Tools
                   <ChevronDown className="w-3 h-3" />
@@ -79,14 +79,16 @@ export default function Layout({ children }) {
                     <span className="absolute -top-1 -right-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] px-2 py-0.5">{toolNotifications}</span>
                   )}
                 </button>
-                {/* Simple dropdown (non-interactive) */}
-                <div className="absolute right-0 mt-2 w-44 bg-white border rounded-md shadow-lg p-2 hidden">
-                  {toolsItems.map((t) => (
-                    <Link key={t.title} to={t.url} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">
-                      {t.title}
-                    </Link>
-                  ))}
-                </div>
+
+                {toolsOpen && (
+                  <div className="absolute right-0 mt-2 w-44 bg-white border rounded-md shadow-lg p-2 z-50">
+                    {toolsItems.map((t) => (
+                      <Link key={t.title} to={t.url} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">
+                        {t.title}
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             </nav>
 
