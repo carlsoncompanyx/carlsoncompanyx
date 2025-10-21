@@ -10,7 +10,7 @@ export default function Header() {
             <img
               src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e8eda219e135b5d9dd26c4/73932103f_CarlsonCompanyBanner.jpeg"
               alt="Carlson Company"
-              className="h-16 object-contain"
+              className="h-10 object-contain"
             />
           </Link>
         </div>
