@@ -17,8 +17,9 @@ const createPageUrl = (name) => `/${name}`;
 export default function Layout({ children }) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
-  // Hardcoded counts to match the design snapshot
+  // Hardcoded counts to match the design snapshot (no external calls)
   const unreadEmailCount = 85;
   const financeNotifications = 1;
   const toolNotifications = 1;
