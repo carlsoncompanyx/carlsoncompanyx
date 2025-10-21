@@ -58,7 +58,7 @@ export default function Layout({ children }) {
                     key={item.title}
                     to={item.url}
                     className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                      isActive ? "bg-slate-900 text-white shadow-lg" : "text-slate-700 hover:bg-slate-100"
+                      isActive ? "bg-slate-700 text-white shadow-lg" : "text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     <Icon className="w-4 h-4" />
