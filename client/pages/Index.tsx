@@ -1,6 +1,3 @@
-import { DemoResponse } from "@shared/api";
-import { useEffect, useState } from "react";
-
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import MetricCard from "@/components/MetricCard";
