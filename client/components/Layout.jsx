@@ -45,7 +45,7 @@ export default function Layout({ children }) {
               <img
                 src="https://ckqphrogexyzhwifuksr.supabase.co/storage/v1/object/sign/imagescarlsoncompany/CarlsonCompany%20Banner%20Upscaled.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNWFlNDM3Ny1hY2YyLTRmMWEtOWEwZS00NWU5MTJjOTE1YjkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJpbWFnZXNjYXJsc29uY29tcGFueS9DYXJsc29uQ29tcGFueSBCYW5uZXIgVXBzY2FsZWQucG5nIiwiaWF0IjoxNzYxMDc5NDkyLCJleHAiOjI3MDcxNTk0OTJ9.xD7hBpzKPEGO650PD1EL9vZWR8AC7Iby0cyK_Vs-9eg"
                 alt="Carlson Company"
-                className="h-13 w-auto transition-transform duration-300 group-hover:scale-90"
+                className="h-12.5 w-auto transition-transform duration-300 group-hover:scale-80"
               />
             </Link>
 
@@ -58,7 +58,7 @@ export default function Layout({ children }) {
                     key={item.title}
                     to={item.url}
                     className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                      isActive ? "bg-slate-700 text-white shadow-lg" : "text-slate-700 hover:bg-slate-100"
+                      isActive ? "bg-slate-900 text-white shadow-lg" : "text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     <Icon className="w-4 h-4" />
