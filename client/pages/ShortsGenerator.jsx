@@ -17,7 +17,7 @@ export default function ShortsGenerator() {
   return (
     <div>
       <h2 className="text-2xl font-semibold mb-4">Shorts Generator</h2>
-      <p className="text-sm text-slate-500 mb-4">Generate short scripts and metadata (mocked).</p>
+      <p className="text-sm text-slate-500 mb-6">Generate short scripts and metadata (mocked).</p>
 
       {message && <div className={`p-3 mb-4 ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{message.text}</div>}
 

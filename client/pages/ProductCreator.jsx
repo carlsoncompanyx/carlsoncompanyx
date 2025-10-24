@@ -15,7 +15,7 @@ export default function ProductCreator(){
   return (
     <div>
       <h2 className="text-2xl font-semibold mb-4">Product Creator</h2>
-      <p className="text-sm text-slate-500 mb-4">Create and preview product listings (mocked).</p>
+      <p className="text-sm text-slate-500 mb-6">Create and preview product listings (mocked).</p>
 
       <div className="flex gap-4">
         <div className="w-1/3">
