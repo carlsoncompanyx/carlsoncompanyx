@@ -41,8 +41,8 @@ export default function Index() {
         <div className="pt-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-sky-800 to-sky-600">Welcome Back</h1>
-              <p className="text-sm text-slate-500 mt-1">Here's what's happening with your business today.</p>
+              <h2 className="text-2xl font-semibold mb-4">Welcome Back</h2>
+              <p className="text-sm text-slate-500 mb-6">Here's what's happening with your business today.</p>
             </div>
           </div>
 
