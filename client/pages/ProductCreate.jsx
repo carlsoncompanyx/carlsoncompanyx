@@ -483,9 +483,9 @@ const ProductCreate = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans">
-      <header className="text-center mb-8">
-        <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Product Create</h1>
-        <p className="text-lg text-gray-500 mt-2">Automated Creative & SEO Workflow</p>
+      <header className="mb-8">
+        <h2 className="text-2xl font-semibold text-slate-900">Product Create</h2>
+        <p className="text-sm text-slate-500 mt-2">Automated Creative & SEO Workflow</p>
       </header>
 
       <div

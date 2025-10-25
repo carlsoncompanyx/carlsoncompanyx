@@ -88,13 +88,16 @@ export default function ShortsGenerator() {
   };
 
   return (
-    <div className="min-h-full bg-slate-100 py-10 px-4">
-      <div className="mx-auto flex w-full max-w-5xl flex-col rounded-xl bg-white px-6 py-8 shadow-lg lg:px-12">
-        <h1 className="text-center text-3xl font-semibold text-slate-700">Shorts Generator</h1>
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans">
+      <header className="mx-auto mb-8 max-w-5xl">
+        <h2 className="text-2xl font-semibold text-slate-900">Shorts Generator</h2>
+        <p className="mt-2 text-sm text-slate-500">Create polished short-form videos with AI-assisted tooling.</p>
+      </header>
 
+      <div className="mx-auto w-full max-w-5xl rounded-2xl bg-white px-6 py-8 shadow-lg lg:px-12">
         {notification && (
           <div
-            className={`mt-6 rounded-lg border px-4 py-3 text-sm ${
+            className={`mb-6 rounded-lg border px-4 py-3 text-sm ${
               notification.type === "error"
                 ? "border-red-200 bg-red-50 text-red-700"
                 : notification.type === "success"
@@ -106,7 +109,7 @@ export default function ShortsGenerator() {
           </div>
         )}
 
-        <section className="mt-8 space-y-6">
+        <section className="space-y-6">
           <div>
             <h2 className="border-b-2 border-slate-100 pb-3 text-xl font-semibold text-slate-600">
               1. Find and Select Video
