@@ -1,9 +1,17 @@
 import React from 'react';
 import { useState } from "react";
 import FinancialChart from '@/components/FinancialChart';
+import { insertExpense } from '@/lib/supabase';
 
 export default function Finances(){
   const [tab, setTab] = useState('reporting');
+  const [date, setDate] = useState('');
+  const [payee, setPayee] = useState('');
+  const [amount, setAmount] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState('');
+  const [submissionSuccess, setSubmissionSuccess] = useState('');
 
   // mock numbers for charts and tax calc
   const totalRevenue = 13706;
@@ -27,11 +35,11 @@ export default function Finances(){
         </button>
         <button
           role="tab"
-          aria-selected={tab === 'expenses'}
-          onClick={() => setTab('expenses')}
-          className={`py-2 px-4 text-sm font-medium rounded ${tab === 'expenses' ? 'bg-white shadow-sm' : 'text-gray-600'}`}
+          aria-selected={tab === 'submit-expense'}
+          onClick={() => setTab('submit-expense')}
+          className={`py-2 px-4 text-sm font-medium rounded ${tab === 'submit-expense' ? 'bg-white shadow-sm' : 'text-gray-600'}`}
         >
-          Expenses
+          Submit Expense
         </button>
         <button
           role="tab"
@@ -156,35 +164,129 @@ export default function Finances(){
           </div>
         )}
 
-        {tab === 'expenses' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow p-6">
-              <h3 className="text-lg font-semibold mb-3">Recent Expenses</h3>
-              <ul className="space-y-3">
-                <li className="flex items-center justify-between bg-red-50 rounded-lg p-3">
-                  <div>
-                    <div className="font-medium text-slate-900">Marketing Campaign</div>
-                    <div className="text-sm text-slate-500">Sep 12, 2025</div>
-                  </div>
-                  <div className="font-bold text-red-600">-$850</div>
-                </li>
-                <li className="flex items-center justify-between bg-red-50 rounded-lg p-3">
-                  <div>
-                    <div className="font-medium text-slate-900">Google Workspace</div>
-                    <div className="text-sm text-slate-500">Sep 1, 2025</div>
-                  </div>
-                  <div className="font-bold text-red-600">-$144</div>
-                </li>
-              </ul>
-            </div>
+        {tab === 'submit-expense' && (
+          <div className="bg-white rounded-2xl shadow p-6 max-w-xl">
+            <h3 className="text-lg font-semibold mb-3">Submit a new expense</h3>
+            <p className="text-sm text-slate-500 mb-6">
+              Enter the expense details below to send them to your Supabase expenses table.
+            </p>
+            <form
+              className="space-y-4"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setSubmissionError('');
+                setSubmissionSuccess('');
 
-            <div className="bg-white rounded-2xl shadow p-6">
-              <h3 className="text-lg font-semibold mb-3">Expense Summary</h3>
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-500">Total Expenses</div>
-                <div className="font-semibold text-slate-900">${totalExpenses.toLocaleString()}</div>
+                if (!date || !payee || !amount) {
+                  setSubmissionError('Please provide a date, payee, and amount before submitting.');
+                  return;
+                }
+
+                const parsedAmount = Number(amount);
+                if (Number.isNaN(parsedAmount)) {
+                  setSubmissionError('Amount must be a valid number.');
+                  return;
+                }
+
+                setIsSubmitting(true);
+                try {
+                  await insertExpense({
+                    date,
+                    payee: payee.trim(),
+                    recurring_expense: isRecurring,
+                    amount: parsedAmount,
+                  });
+                  setSubmissionSuccess('Expense submitted successfully.');
+                  setDate('');
+                  setPayee('');
+                  setAmount('');
+                  setIsRecurring(false);
+                } catch (error) {
+                  setSubmissionError(error instanceof Error ? error.message : 'Failed to submit expense.');
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }}
+            >
+              <div>
+                <label className="block text-sm font-medium text-slate-700" htmlFor="expense-date">
+                  Date
+                </label>
+                <input
+                  id="expense-date"
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
+                  required
+                />
               </div>
-            </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700" htmlFor="expense-payee">
+                  Payee
+                </label>
+                <input
+                  id="expense-payee"
+                  type="text"
+                  value={payee}
+                  onChange={(event) => setPayee(event.target.value)}
+                  className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
+                  placeholder="e.g. Google Workspace"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700" htmlFor="expense-amount">
+                  Amount
+                </label>
+                <div className="relative mt-2">
+                  <span className="absolute inset-y-0 left-3 flex items-center text-sm text-slate-500">$</span>
+                  <input
+                    id="expense-amount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={amount}
+                    onChange={(event) => setAmount(event.target.value)}
+                    className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 pl-7 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  id="expense-recurring"
+                  type="checkbox"
+                  checked={isRecurring}
+                  onChange={(event) => setIsRecurring(event.target.checked)}
+                  className="h-4 w-4 rounded border border-slate-300 text-slate-900 focus:ring-slate-500"
+                />
+                <label htmlFor="expense-recurring" className="text-sm text-slate-700">
+                  Recurring expense
+                </label>
+              </div>
+
+              {submissionError && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {submissionError}
+                </div>
+              )}
+
+              {submissionSuccess && (
+                <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                  {submissionSuccess}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Submitting…' : 'Submit expense'}
+              </button>
+            </form>
           </div>
         )}
 
