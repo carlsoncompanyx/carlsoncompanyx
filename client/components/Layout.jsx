@@ -33,7 +33,7 @@ export default function Layout({ children }) {
 
   const toolsItems = [
     { title: "Shorts Generator", url: createPageUrl("ShortsGenerator") },
-    { title: "Product Creator", url: createPageUrl("ProductCreator") },
+    { title: "Product Create", url: createPageUrl("ProductCreate") },
   ];
 
   return (

@@ -12,7 +12,7 @@ import Finances from "./pages/Finances";
 import Metrics from "./pages/Metrics";
 import Emails from "./pages/Emails";
 import ShortsGenerator from "./pages/ShortsGenerator";
-import ProductCreator from "./pages/ProductCreator";
+import ProductCreate from "./pages/ProductCreate";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -31,7 +31,7 @@ const App = () => (
           <Route path="/Metrics" element={<Layout><Metrics /></Layout>} />
           <Route path="/Emails" element={<Layout><Emails /></Layout>} />
           <Route path="/ShortsGenerator" element={<Layout><ShortsGenerator /></Layout>} />
-          <Route path="/ProductCreator" element={<Layout><ProductCreator /></Layout>} />
+          <Route path="/ProductCreate" element={<Layout><ProductCreate /></Layout>} />
           <Route path="/Settings" element={<Layout><Settings /></Layout>} />
 
           {/* catch-all */}
