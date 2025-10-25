@@ -90,7 +90,10 @@ export default function ShortsGenerator() {
   return (
     <div className="min-h-full bg-slate-100 py-10 px-4">
       <div className="mx-auto flex w-full max-w-5xl flex-col rounded-xl bg-white px-6 py-8 shadow-lg lg:px-12">
-        <h1 className="text-center text-3xl font-semibold text-slate-700">Shorts Generator</h1>
+        <header className="mb-6">
+          <h2 className="text-2xl font-semibold text-slate-900">Shorts Generator</h2>
+          <p className="text-sm text-slate-500">Create polished short-form videos with AI-assisted tooling.</p>
+        </header>
 
         {notification && (
           <div
