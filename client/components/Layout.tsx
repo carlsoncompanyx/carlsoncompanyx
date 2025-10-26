@@ -38,6 +38,7 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const { user, signOut } = useAuth();
 
@@ -80,6 +81,7 @@ export default function Layout({ children }: LayoutProps) {
     } finally {
       setSigningOut(false);
       setMobileMenuOpen(false);
+      setMobileToolsOpen(false);
     }
   };
 
@@ -180,7 +182,13 @@ export default function Layout({ children }: LayoutProps) {
 
             <button
               className="md:hidden inline-flex items-center justify-center p-2 rounded-md text-slate-700 hover:text-slate-900"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              onClick={() => {
+                const nextOpen = !mobileMenuOpen;
+                setMobileMenuOpen(nextOpen);
+                if (!nextOpen) {
+                  setMobileToolsOpen(false);
+                }
+              }}
             >
               {mobileMenuOpen ? (
                 <X className="w-5 h-5" />
@@ -198,7 +206,10 @@ export default function Layout({ children }: LayoutProps) {
                 <Link
                   key={item.title}
                   to={item.url}
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setMobileToolsOpen(false);
+                  }}
                   className={`flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-all ${
                     location.pathname === item.url
                       ? "bg-slate-900 text-white"
@@ -218,19 +229,43 @@ export default function Layout({ children }: LayoutProps) {
               ))}
 
               <div className="mt-2 border-t pt-2">
-                <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Tools
-                </div>
-                {toolsItems.map((t) => (
-                  <Link
-                    key={t.title}
-                    to={t.url}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block px-4 py-3 rounded-lg text-sm text-slate-700 hover:bg-slate-100"
-                  >
-                    {t.title}
-                  </Link>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setMobileToolsOpen((open) => !open)}
+                  className="flex w-full items-center justify-between px-4 py-3 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  <span className="flex items-center gap-3">
+                    <Wrench className="w-5 h-5" />
+                    Tools
+                    {toolNotifications ? (
+                      <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                        {toolNotifications}
+                      </span>
+                    ) : null}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      mobileToolsOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                {mobileToolsOpen ? (
+                  <div className="mt-1 space-y-1">
+                    {toolsItems.map((t) => (
+                      <Link
+                        key={t.title}
+                        to={t.url}
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setMobileToolsOpen(false);
+                        }}
+                        className="block rounded-lg px-8 py-3 text-sm text-slate-700 hover:bg-slate-100"
+                      >
+                        {t.title}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-4 border-t pt-4">
