@@ -67,9 +67,7 @@ export default function Finances() {
   return (
     <div>
       <h2 className="text-2xl font-semibold mb-4">Finances</h2>
-      <p className="text-sm text-slate-500 mb-6">
-        Overview of your finances (mocked).
-      </p>
+      <p className="text-sm text-slate-500 mb-6">Overview of your finances (mocked).</p>
 
       <div
         role="tablist"
@@ -479,8 +477,8 @@ export default function Finances() {
                 <div>
                   <h3 className="text-lg font-semibold">Quarterly tax schedule</h3>
                   <p className="text-sm text-slate-500">
-                    Badges in the header light up two weeks before each due date
-                    until you mark the payment as paid.
+                    Badges in the header light up during the two weeks leading up
+                    to each due date and clear once you mark the payment as paid.
                   </p>
                 </div>
                 <span
@@ -514,7 +512,7 @@ export default function Finances() {
                 {displayedTaxPayments.map((payment) => {
                   const statusColor = payment.isPaid
                     ? "text-emerald-600"
-                    : payment.needsAttention
+                    : payment.needsAttention || payment.isOverdue
                       ? "text-red-600"
                       : "text-slate-500";
 
@@ -533,13 +531,14 @@ export default function Finances() {
                         <p className={`mt-1 text-xs font-medium ${statusColor}`}>
                           {describeDueWindow(payment.daysUntilDue)}
                           {!payment.isPaid && payment.needsAttention ? " • Needs attention" : ""}
+                          {!payment.isPaid && payment.isOverdue ? " • Overdue" : ""}
                           {payment.isPaid ? " • Paid" : ""}
                         </p>
                       </div>
 
                       <div className="flex items-center gap-3">
                         <span className={`text-xs font-semibold uppercase ${statusColor}`}>
-                          {payment.isPaid ? "Paid" : "Pending"}
+                          {payment.isPaid ? "Paid" : payment.isOverdue ? "Overdue" : "Pending"}
                         </span>
                         <button
                           type="button"

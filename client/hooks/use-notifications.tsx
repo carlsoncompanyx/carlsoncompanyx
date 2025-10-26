@@ -22,6 +22,7 @@ type TaxPayment = {
   paidAt: string | null;
   daysUntilDue: number;
   needsAttention: boolean;
+  isOverdue: boolean;
 };
 
 type AutomationResult = {
@@ -71,7 +72,7 @@ const INITIAL_EMAILS: Email[] = [
     subject: "Proposal",
     body: "Hey — please review the attached proposal.",
     received_date: new Date().toISOString(),
-    is_read: false,
+    is_read: true,
     is_archived: false,
     resume_url: null,
     message_id: "m1",
@@ -163,6 +164,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     const baseYear = now.getFullYear();
     const schedules = [...createQuarterSchedule(baseYear), ...createQuarterSchedule(baseYear + 1)];
     const dayMs = 1000 * 60 * 60 * 24;
+    const reminderWindowMs = 14 * dayMs;
 
     return schedules.map((payment) => {
       const dueDate = payment.dueDate;
@@ -170,7 +172,8 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       const diffMs = dueDate.getTime() - now.getTime();
       const daysUntilDue = Math.ceil(diffMs / dayMs);
       const isPaid = Boolean(status?.paid);
-      const needsAttention = !isPaid && daysUntilDue <= 14;
+      const isOverdue = !isPaid && diffMs < 0;
+      const needsAttention = !isPaid && diffMs >= 0 && diffMs <= reminderWindowMs;
 
       return {
         id: payment.id,
@@ -181,6 +184,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
         paidAt: status?.paidAt ?? null,
         daysUntilDue,
         needsAttention,
+        isOverdue,
       };
     });
   }, [taxPaymentStatus]);
