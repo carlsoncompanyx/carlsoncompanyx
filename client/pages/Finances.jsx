@@ -1,8 +1,8 @@
-import React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import FinancialChart from "@/components/FinancialChart";
 import { insertExpense } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useFinancialData } from "@/hooks/use-financial-data";
 
 export default function Finances() {
   const { session } = useAuth();
@@ -14,18 +14,33 @@ export default function Finances() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
   const [submissionSuccess, setSubmissionSuccess] = useState("");
+  const {
+    monthlyTotals,
+    chartData,
+    totals,
+    taxExpenses,
+    isLoading: isLoadingFinancials,
+    error: financialError,
+    refresh: refreshFinancials,
+  } = useFinancialData();
 
-  // mock numbers for charts and tax calc
-  const totalRevenue = 13706;
-  const totalExpenses = 4200;
-  const taxRate = 0.21;
-  const estimatedTax = Math.round((totalRevenue - totalExpenses) * taxRate);
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }),
+    [],
+  );
+
+  const chartDescription =
+    "Values are aggregated by month using revenue and expense entries from Supabase. Profit represents revenue minus expenses.";
 
   return (
     <div>
       <h2 className="text-2xl font-semibold mb-4">Finances</h2>
       <p className="text-sm text-slate-500 mb-6">
-        Overview of your finances (mocked).
+        Overview of your finances based on revenue and expense records stored in Supabase.
       </p>
 
       <div
@@ -173,16 +188,28 @@ export default function Finances() {
             {/* Big chart + legend */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
               <div className="overflow-x-auto">
-                <FinancialChart title="Revenue vs Expenses" />
+                <FinancialChart
+                  title="Revenue vs Expenses"
+                  data={chartData}
+                />
               </div>
 
-              <div className="mt-4">
-                <p className="text-sm text-slate-800 font-semibold">Note</p>
-                <p className="text-sm text-slate-600">
-                  Dashed lines indicate that the data range includes projected
-                  future values. Hollow dots indicate projected values.
+              {isLoadingFinancials ? (
+                <p className="mt-4 text-sm text-slate-500">
+                  Loading financial data…
                 </p>
-              </div>
+              ) : financialError ? (
+                <p className="mt-4 text-sm text-red-600">{financialError}</p>
+              ) : (
+                <div className="mt-4 space-y-1">
+                  <p className="text-sm text-slate-800 font-semibold">
+                    About this chart
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    {chartDescription}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Table */}
@@ -198,39 +225,67 @@ export default function Finances() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    ["Oct 2024", "$0", "$0", "$0"],
-                    ["Nov 2024", "$0", "$0", "$0"],
-                    ["Dec 2024", "$1,200", "$2,500", "-$1,300"],
-                    ["Jan 2025", "$16,000", "$994", "$15,006"],
-                    ["Feb 2025", "$0", "$0", "$0"],
-                    ["Mar 2025", "$0", "$0", "$0"],
-                    ["Apr 2025", "$0", "$0", "$0"],
-                    ["May 2025", "$0", "$0", "$0"],
-                    ["Jun 2025", "$0", "$0", "$0"],
-                    ["Jul 2025", "$0", "$0", "$0"],
-                    ["Aug 2025", "$0", "$0", "$0"],
-                    ["Sep 2025", "$0", "$0", "$0"],
-                    ["Oct 2025", "$0", "$0", "$0"],
-                  ].map((r) => (
-                    <tr key={r[0]} className="border-t border-slate-100">
-                      <td className="py-3 font-medium">{r[0]}</td>
-                      <td className="py-3 text-right text-green-600 font-semibold">
-                        {r[1]}
-                      </td>
-                      <td className="py-3 text-right text-red-600 font-semibold">
-                        {r[2]}
-                      </td>
-                      <td className="py-3 text-right text-blue-600 font-semibold">
-                        {r[3]}
-                      </td>
-                      <td className="py-3 text-center">
-                        <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-xs font-semibold">
-                          Actual
-                        </span>
+                  {isLoadingFinancials ? (
+                    <tr>
+                      <td
+                        className="py-6 text-center text-slate-500"
+                        colSpan={5}
+                      >
+                        Loading financial data…
                       </td>
                     </tr>
-                  ))}
+                  ) : financialError ? (
+                    <tr>
+                      <td
+                        className="py-6 text-center text-red-600"
+                        colSpan={5}
+                      >
+                        {financialError}
+                      </td>
+                    </tr>
+                  ) : monthlyTotals.length === 0 ? (
+                    <tr>
+                      <td
+                        className="py-6 text-center text-slate-500"
+                        colSpan={5}
+                      >
+                        No financial records found yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    monthlyTotals.map((row) => {
+                      const profitClass =
+                        row.profit >= 0
+                          ? "text-right text-emerald-600 font-semibold"
+                          : "text-right text-red-600 font-semibold";
+                      const typeLabel =
+                        row.revenue > 0 && row.expenses > 0
+                          ? "Revenue & Expenses"
+                          : row.revenue > 0
+                          ? "Revenue"
+                          : "Expenses";
+
+                      return (
+                        <tr key={row.key} className="border-t border-slate-100">
+                          <td className="py-3 font-medium">{row.period}</td>
+                          <td className="py-3 text-right text-emerald-600 font-semibold">
+                            {currencyFormatter.format(row.revenue)}
+                          </td>
+                          <td className="py-3 text-right text-red-600 font-semibold">
+                            {currencyFormatter.format(row.expenses)}
+                          </td>
+                          <td className={`py-3 ${profitClass}`}>
+                            {currencyFormatter.format(row.profit)}
+                          </td>
+                          <td className="py-3 text-center">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-xs font-semibold">
+                              {typeLabel}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -286,6 +341,7 @@ export default function Finances() {
                   setPayee("");
                   setAmount("");
                   setIsRecurring(false);
+                  await refreshFinancials();
                 } catch (error) {
                   setSubmissionError(
                     error instanceof Error
@@ -394,39 +450,154 @@ export default function Finances() {
         )}
 
         {tab === "taxes" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-2xl shadow p-6">
-              <h3 className="text-lg font-semibold mb-3">Estimate</h3>
-              <p className="text-sm text-slate-500 mb-4">
-                Estimated tax based on your mocked revenue and expenses.
-              </p>
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-500">Taxable Income</div>
-                <div className="font-semibold text-slate-900">
-                  ${(totalRevenue - totalExpenses).toLocaleString()}
-                </div>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-2xl shadow p-6">
+                <h3 className="text-lg font-semibold mb-3">Estimate</h3>
+                <p className="text-sm text-slate-500 mb-4">
+                  Estimated quarterly tax liability using revenue and expense
+                  records stored in Supabase.
+                </p>
+                {isLoadingFinancials ? (
+                  <p className="text-sm text-slate-500">
+                    Loading financial data…
+                  </p>
+                ) : financialError ? (
+                  <p className="text-sm text-red-600">{financialError}</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-slate-500">Total Revenue</div>
+                      <div className="font-semibold text-slate-900">
+                        {currencyFormatter.format(totals.revenueTotal)}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-slate-500">
+                        Total Expenses
+                      </div>
+                      <div className="font-semibold text-slate-900">
+                        {currencyFormatter.format(totals.expensesTotal)}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-slate-500">
+                        Taxable Income
+                      </div>
+                      <div className="font-semibold text-slate-900">
+                        {currencyFormatter.format(totals.taxableIncome)}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-slate-500">Tax Rate</div>
+                      <div className="font-semibold text-slate-900">
+                        {Math.round(totals.taxRate * 100)}%
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <div className="text-sm text-slate-500">Estimated Tax</div>
+                      <div className="text-2xl font-bold text-slate-900">
+                        {currencyFormatter.format(totals.estimatedTax)}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center justify-between mt-2">
-                <div className="text-sm text-slate-500">Tax Rate</div>
-                <div className="font-semibold text-slate-900">
-                  {Math.round(taxRate * 100)}%
-                </div>
-              </div>
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-sm text-slate-500">Estimated Tax</div>
-                <div className="text-2xl font-bold text-slate-900">
-                  ${estimatedTax.toLocaleString()}
-                </div>
+
+              <div className="bg-white rounded-2xl shadow p-6">
+                <h3 className="text-lg font-semibold mb-3">Notes</h3>
+                <p className="text-sm text-slate-500">
+                  Tax expenses are identified automatically when “tax” appears
+                  in the payee, category, or notes fields of an expense. Update
+                  Supabase entries to refine the estimate or to add missing
+                  quarterly payments.
+                </p>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow p-6">
-              <h3 className="text-lg font-semibold mb-3">Notes</h3>
-              <p className="text-sm text-slate-500">
-                This is a simple estimate using a flat tax rate for
-                demonstration. Connect a real accounting service or Supabase
-                records for accurate results.
+            <div className="bg-white rounded-2xl shadow p-6 overflow-x-auto">
+              <h3 className="text-lg font-semibold mb-3">
+                Tax payments this year
+              </h3>
+              <p className="text-sm text-slate-500 mb-4">
+                The table below lists tax-related expenses detected for the
+                current calendar year so you can track quarterly payments.
               </p>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-600">
+                    <th className="py-3">Date</th>
+                    <th className="py-3">Quarter</th>
+                    <th className="py-3">Payee</th>
+                    <th className="py-3 text-right">Amount</th>
+                    <th className="py-3">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoadingFinancials ? (
+                    <tr>
+                      <td
+                        className="py-6 text-center text-slate-500"
+                        colSpan={5}
+                      >
+                        Loading tax expenses…
+                      </td>
+                    </tr>
+                  ) : financialError ? (
+                    <tr>
+                      <td
+                        className="py-6 text-center text-red-600"
+                        colSpan={5}
+                      >
+                        {financialError}
+                      </td>
+                    </tr>
+                  ) : taxExpenses.length === 0 ? (
+                    <tr>
+                      <td
+                        className="py-6 text-center text-slate-500"
+                        colSpan={5}
+                      >
+                        No tax-related expenses recorded for this year yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    taxExpenses.map((expense) => {
+                      const quarter = `Q${
+                        Math.floor(expense.date.getMonth() / 3) + 1
+                      }`;
+                      return (
+                        <tr
+                          key={expense.id}
+                          className="border-t border-slate-100"
+                        >
+                          <td className="py-3">
+                            {expense.date.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "2-digit",
+                              year: "numeric",
+                            })}
+                          </td>
+                          <td className="py-3">
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                              {quarter}
+                            </span>
+                          </td>
+                          <td className="py-3 font-medium text-slate-700">
+                            {expense.payee}
+                          </td>
+                          <td className="py-3 text-right font-semibold text-slate-900">
+                            {currencyFormatter.format(expense.amount)}
+                          </td>
+                          <td className="py-3 text-slate-500">
+                            {expense.notes?.trim() ? expense.notes : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

@@ -16,6 +16,84 @@ export interface ExpensePayload {
   amount: number;
 }
 
+export type ExpenseRow = {
+  id?: number | string;
+  date?: string | null;
+  created_at?: string | null;
+  payee?: string | null;
+  recurring_expense?: boolean | null;
+  amount?: number | null;
+  category?: string | null;
+  notes?: string | null;
+  [key: string]: unknown;
+};
+
+export type RevenueRow = {
+  id?: number | string;
+  date?: string | null;
+  created_at?: string | null;
+  amount?: number | null;
+  description?: string | null;
+  source?: string | null;
+  [key: string]: unknown;
+};
+
+type FetchFinancialOptions = {
+  accessToken?: string | null;
+  startDate?: string;
+  endDate?: string;
+  signal?: AbortSignal;
+};
+
+async function fetchFromTable<T>(
+  table: string,
+  { accessToken, startDate, endDate, signal }: FetchFinancialOptions = {},
+): Promise<T[]> {
+  if (!REST_ENDPOINT || !SUPABASE_ANON_KEY) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const url = new URL(`${REST_ENDPOINT}/${table}`);
+  url.searchParams.set("select", "*");
+  url.searchParams.set("order", "date.asc");
+
+  if (startDate || endDate) {
+    url.searchParams.delete("date");
+    if (startDate) {
+      url.searchParams.append("date", `gte.${startDate}`);
+    }
+    if (endDate) {
+      url.searchParams.append("date", `lte.${endDate}`);
+    }
+  }
+
+  const token = accessToken || SUPABASE_ANON_KEY;
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Failed to load data from ${table}.`);
+  }
+
+  return response.json();
+}
+
+export async function fetchExpenses(options?: FetchFinancialOptions) {
+  return fetchFromTable<ExpenseRow>("expenses", options);
+}
+
+export async function fetchRevenues(options?: FetchFinancialOptions) {
+  return fetchFromTable<RevenueRow>("revenue", options);
+}
+
 export async function insertExpense(
   payload: ExpensePayload,
   accessToken: string,
