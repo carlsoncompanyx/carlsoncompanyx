@@ -1,23 +1,24 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Reply, Trash2, Archive, Send } from "lucide-react";
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useNotifications } from "@/hooks/use-notifications";
 
 export default function Emails() {
-  const [selectedEmail, setSelectedEmail] = useState(null);
+  const { emails, setEmails } = useNotifications();
+  const [selectedEmailId, setSelectedEmailId] = useState(null);
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [message, setMessage] = useState(null);
 
-  // Sample local emails (no external calls)
-  const [emails, setEmails] = useState([
-    { id: '1', from_name: 'Alice', from_email: 'alice@example.com', subject: 'Proposal', body: 'Hey — please review the attached proposal.', received_date: new Date().toISOString(), is_read: false, is_archived: false, resume_url: null, message_id: 'm1' },
-    { id: '2', from_name: 'Bob', from_email: 'bob@example.com', subject: 'Invoice', body: 'Invoice for last month attached.', received_date: new Date().toISOString(), is_read: true, is_archived: false, resume_url: null, message_id: 'm2' },
-  ]);
+  const selectedEmail = useMemo(
+    () => emails.find((email) => email.id === selectedEmailId) ?? null,
+    [emails, selectedEmailId],
+  );
 
   const sendActionToN8n = async (email, action, body = null) => {
     // In standalone mode we simulate success
@@ -26,7 +27,7 @@ export default function Emails() {
   };
 
   const handleSelectEmail = (email) => {
-    setSelectedEmail(email);
+    setSelectedEmailId(email.id);
     setIsReplying(false);
     setReplyText("");
     setMessage(null);
@@ -46,7 +47,7 @@ export default function Emails() {
     try {
       await sendActionToN8n(email, 'archive');
       setEmails((prev) => prev.map((e) => (e.id === email.id ? { ...e, is_archived: true } : e)));
-      setSelectedEmail(null);
+      setSelectedEmailId(null);
       setMessage({ type: "success", text: "Email archived successfully" });
     } catch (error) {
       console.error("Failed to archive:", error);
@@ -67,7 +68,7 @@ export default function Emails() {
     try {
       await sendActionToN8n(email, 'delete');
       setEmails((prev) => prev.filter((e) => e.id !== email.id));
-      setSelectedEmail(null);
+      setSelectedEmailId(null);
       setMessage({ type: "success", text: "Email deleted" });
     } catch (error) {
       console.error("Failed to delete:", error);
@@ -99,7 +100,7 @@ export default function Emails() {
     setIsSending(false);
   };
 
-  const activeEmails = emails.filter((e) => !e.is_archived);
+  const activeEmails = useMemo(() => emails.filter((e) => !e.is_archived), [emails]);
 
   return (
     <div className="space-y-8">
@@ -169,7 +170,7 @@ export default function Emails() {
             <Card className="shadow-xl border-0">
               <CardHeader className="border-b border-slate-100 p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedEmail(null)}>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedEmailId(null)}>
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back to Inbox
                   </Button>

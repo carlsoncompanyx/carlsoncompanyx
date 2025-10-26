@@ -1,8 +1,8 @@
-import React from "react";
-import { useState } from "react";
+import React, { useMemo, useState } from "react";
 import FinancialChart from "@/components/FinancialChart";
 import { insertExpense } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useNotifications } from "@/hooks/use-notifications";
 
 export default function Finances() {
   const { session } = useAuth();
@@ -14,6 +14,49 @@ export default function Finances() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
   const [submissionSuccess, setSubmissionSuccess] = useState("");
+  const {
+    taxPayments,
+    markTaxPaymentPaid,
+    markTaxPaymentUnpaid,
+    financeNotifications,
+  } = useNotifications();
+
+  const sortedTaxPayments = useMemo(
+    () =>
+      [...taxPayments].sort(
+        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+      ),
+    [taxPayments],
+  );
+
+  const displayedTaxPayments = useMemo(
+    () => sortedTaxPayments.slice(0, 6),
+    [sortedTaxPayments],
+  );
+
+  const dueDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
+    [],
+  );
+
+  const describeDueWindow = (daysUntilDue) => {
+    if (daysUntilDue === 0) {
+      return "Due today";
+    }
+    if (daysUntilDue > 0) {
+      const plural = daysUntilDue === 1 ? "" : "s";
+      return `${daysUntilDue} day${plural} remaining`;
+    }
+
+    const overdueDays = Math.abs(daysUntilDue);
+    const plural = overdueDays === 1 ? "" : "s";
+    return `${overdueDays} day${plural} overdue`;
+  };
 
   // mock numbers for charts and tax calc
   const totalRevenue = 13706;
@@ -394,39 +437,136 @@ export default function Finances() {
         )}
 
         {tab === "taxes" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-2xl shadow p-6">
-              <h3 className="text-lg font-semibold mb-3">Estimate</h3>
-              <p className="text-sm text-slate-500 mb-4">
-                Estimated tax based on your mocked revenue and expenses.
-              </p>
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-500">Taxable Income</div>
-                <div className="font-semibold text-slate-900">
-                  ${(totalRevenue - totalExpenses).toLocaleString()}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-2xl shadow p-6">
+                <h3 className="text-lg font-semibold mb-3">Estimate</h3>
+                <p className="text-sm text-slate-500 mb-4">
+                  Estimated tax based on your mocked revenue and expenses.
+                </p>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-slate-500">Taxable Income</div>
+                  <div className="font-semibold text-slate-900">
+                    ${(totalRevenue - totalExpenses).toLocaleString()}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <div className="text-sm text-slate-500">Tax Rate</div>
+                  <div className="font-semibold text-slate-900">
+                    {Math.round(taxRate * 100)}%
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-slate-500">Estimated Tax</div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    ${estimatedTax.toLocaleString()}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center justify-between mt-2">
-                <div className="text-sm text-slate-500">Tax Rate</div>
-                <div className="font-semibold text-slate-900">
-                  {Math.round(taxRate * 100)}%
-                </div>
-              </div>
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-sm text-slate-500">Estimated Tax</div>
-                <div className="text-2xl font-bold text-slate-900">
-                  ${estimatedTax.toLocaleString()}
-                </div>
+
+              <div className="bg-white rounded-2xl shadow p-6">
+                <h3 className="text-lg font-semibold mb-3">Notes</h3>
+                <p className="text-sm text-slate-500">
+                  This is a simple estimate using a flat tax rate for
+                  demonstration. Connect a real accounting service or Supabase
+                  records for accurate results.
+                </p>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow p-6">
-              <h3 className="text-lg font-semibold mb-3">Notes</h3>
-              <p className="text-sm text-slate-500">
-                This is a simple estimate using a flat tax rate for
-                demonstration. Connect a real accounting service or Supabase
-                records for accurate results.
-              </p>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Quarterly tax schedule</h3>
+                  <p className="text-sm text-slate-500">
+                    Badges in the header light up two weeks before each due date
+                    until you mark the payment as paid.
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                    financeNotifications > 0
+                      ? "bg-red-100 text-red-700"
+                      : "bg-emerald-100 text-emerald-700"
+                  }`}
+                >
+                  {financeNotifications > 0
+                    ? `${financeNotifications} attention`
+                    : "All clear"}
+                </span>
+              </div>
+
+              <div className="mt-4">
+                {financeNotifications > 0 ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+                    {financeNotifications === 1
+                      ? "One quarterly payment needs attention within the next two weeks."
+                      : `${financeNotifications} quarterly payments need attention within the next two weeks.`}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
+                    You're all set for the next two weeks.
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {displayedTaxPayments.map((payment) => {
+                  const statusColor = payment.isPaid
+                    ? "text-emerald-600"
+                    : payment.needsAttention
+                      ? "text-red-600"
+                      : "text-slate-500";
+
+                  return (
+                    <div
+                      key={payment.id}
+                      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">
+                          {payment.quarter} {payment.year}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Due {dueDateFormatter.format(new Date(payment.dueDate))}
+                        </p>
+                        <p className={`mt-1 text-xs font-medium ${statusColor}`}>
+                          {describeDueWindow(payment.daysUntilDue)}
+                          {!payment.isPaid && payment.needsAttention ? " • Needs attention" : ""}
+                          {payment.isPaid ? " • Paid" : ""}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-semibold uppercase ${statusColor}`}>
+                          {payment.isPaid ? "Paid" : "Pending"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            payment.isPaid
+                              ? markTaxPaymentUnpaid(payment.id)
+                              : markTaxPaymentPaid(payment.id)
+                          }
+                          className={`rounded-full px-4 py-1 text-xs font-semibold transition ${
+                            payment.isPaid
+                              ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                              : "bg-slate-900 text-white hover:bg-slate-800"
+                          }`}
+                        >
+                          {payment.isPaid ? "Mark unpaid" : "Mark paid"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {sortedTaxPayments.length > displayedTaxPayments.length ? (
+                  <p className="text-center text-xs text-slate-500">
+                    Showing the next {displayedTaxPayments.length} payments.
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
         )}

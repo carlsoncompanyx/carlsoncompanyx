@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { AuthProvider } from "@/hooks/use-auth";
+import { NotificationProvider } from "@/hooks/use-notifications";
 
 const queryClient = new QueryClient();
 
@@ -32,36 +33,38 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={renderProtectedPage(<Home />)} />
-            <Route path="/Home" element={renderProtectedPage(<Home />)} />
-            <Route
-              path="/Finances"
-              element={renderProtectedPage(<Finances />)}
-            />
-            <Route path="/Metrics" element={renderProtectedPage(<Metrics />)} />
-            <Route path="/Emails" element={renderProtectedPage(<Emails />)} />
-            <Route
-              path="/ShortsGenerator"
-              element={renderProtectedPage(<ShortsGenerator />)}
-            />
-            <Route
-              path="/ProductCreate"
-              element={renderProtectedPage(<ProductCreate />)}
-            />
-            <Route
-              path="/Settings"
-              element={renderProtectedPage(<Settings />)}
-            />
+        <NotificationProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/" element={renderProtectedPage(<Home />)} />
+              <Route path="/Home" element={renderProtectedPage(<Home />)} />
+              <Route
+                path="/Finances"
+                element={renderProtectedPage(<Finances />)}
+              />
+              <Route path="/Metrics" element={renderProtectedPage(<Metrics />)} />
+              <Route path="/Emails" element={renderProtectedPage(<Emails />)} />
+              <Route
+                path="/ShortsGenerator"
+                element={renderProtectedPage(<ShortsGenerator />)}
+              />
+              <Route
+                path="/ProductCreate"
+                element={renderProtectedPage(<ProductCreate />)}
+              />
+              <Route
+                path="/Settings"
+                element={renderProtectedPage(<Settings />)}
+              />
 
-            {/* catch-all */}
-            <Route path="*" element={renderProtectedPage(<NotFound />)} />
-          </Routes>
-        </BrowserRouter>
+              {/* catch-all */}
+              <Route path="*" element={renderProtectedPage(<NotFound />)} />
+            </Routes>
+          </BrowserRouter>
+        </NotificationProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

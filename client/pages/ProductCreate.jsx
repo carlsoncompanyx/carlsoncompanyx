@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useNotifications } from "@/hooks/use-notifications";
 
 const N8N_WEBHOOK_URL = "http://localhost:5678/webhook-test/start_mvp_workflow";
 const PRODUCT_PROXY_ENDPOINT = "/api/get-printify-products";
@@ -34,6 +35,7 @@ const ProductCreate = () => {
 
   const [productData, setProductData] = useState([]);
   const [isProductsLoading, setIsProductsLoading] = useState(true);
+  const { addAutomationResult } = useNotifications();
 
   const toast = (message, isError = false) => {
     setStatusMessage(message);
@@ -155,6 +157,12 @@ const ProductCreate = () => {
 
       if (result) {
         setGeneratedListingData(result);
+        addAutomationResult({
+          id: "product-create-step-1",
+          title: "Review SEO blueprint",
+          description: "Step 1 returned new listing copy that needs approval before moving on.",
+          href: "/ProductCreate#product-create-step-1",
+        });
         toast("Step 1 complete. Listing data received. Proceed to Step 2.");
       } else {
         throw new Error(`Response failed all validation checks. Raw data: ${responseText.substring(0, 80)}...`);
@@ -213,6 +221,12 @@ const ProductCreate = () => {
         setHistoryList(newImages);
         setMainImage(newImages[0]);
         setSelectedImageIds([newImages[0].id]);
+        addAutomationResult({
+          id: "product-create-step-2",
+          title: `Review ${newImages.length} generated image${newImages.length === 1 ? "" : "s"}`,
+          description: "Approve or enhance the latest AI-generated images before packaging.",
+          href: "/ProductCreate#product-create-step-3",
+        });
         toast(`${newImages.length} images loaded successfully. Proceed to Step 3.`);
       } else {
         throw new Error("Webhook responded with JSON but did not contain the required 'imageUrls' array.");
@@ -320,6 +334,12 @@ const ProductCreate = () => {
 
     setFinalMockups(packages);
     setIsProcessing(false);
+    addAutomationResult({
+      id: "product-create-step-4",
+      title: `Review ${packages.length} product package${packages.length === 1 ? "" : "s"}`,
+      description: "Finalize mockups and listing data before publishing the automation run.",
+      href: "/ProductCreate#product-create-step-4",
+    });
     toast(`${packages.length} final product package(s) generated successfully! Proceed to Finalize.`);
   };
 
@@ -406,6 +426,20 @@ const ProductCreate = () => {
       toast(`ERROR: Could not send data to n8n webhook: ${error.message}`, true);
     } finally {
       setIsProcessing(false);
+
+      if (n8nSuccess) {
+        const automationId =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `product-create-publish-${Date.now()}`;
+        addAutomationResult({
+          id: automationId,
+          title: "Confirm Printify automation",
+          description:
+            "n8n received a final package from Product Create. Confirm the downstream workflow and CSV export.",
+          href: "/ProductCreate#product-create-step-4",
+        });
+      }
 
       if (n8nSuccess && csvSuccess) {
         toast("SUCCESS: Final package sent to Printify (n8n) AND exported to CSV!");
@@ -523,7 +557,7 @@ const ProductCreate = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
+      <div id="product-create-step-1" className="bg-white rounded-2xl shadow-xl p-6 mb-8">
         <div className="text-xl font-bold text-gray-900 mb-4 border-b-2 border-gray-200 pb-2">
           Step 1: Idea Generation & SEO Blueprint (Webhook Trigger)
         </div>
@@ -590,7 +624,7 @@ const ProductCreate = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
+      <div id="product-create-step-2" className="bg-white rounded-2xl shadow-xl p-6 mb-8">
         <div className="text-xl font-bold text-gray-900 mb-4 border-b-2 border-gray-200 pb-2">
           Step 2: Photo Generator Prompt (Webhook Trigger)
         </div>
@@ -645,7 +679,7 @@ const ProductCreate = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
+      <div id="product-create-step-3" className="bg-white rounded-2xl shadow-xl p-6 mb-8">
         <div className="text-xl font-bold text-gray-900 mb-4 border-b-2 border-gray-200 pb-2">
           Step 3: Image Review & Product Selection
         </div>
@@ -782,7 +816,7 @@ const ProductCreate = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
+      <div id="product-create-step-4" className="bg-white rounded-2xl shadow-xl p-6 mb-8">
         <div className="text-xl font-bold text-gray-900 mb-4 border-b-2 border-gray-200 pb-2">
           Step 4: Final Mockup & Listing Review
         </div>
