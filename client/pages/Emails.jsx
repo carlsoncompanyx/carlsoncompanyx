@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Reply, Trash2, Archive, Send } from "lucide-react";
+import { ArrowLeft, Reply, Trash2, Archive, Send, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -12,42 +12,144 @@ export default function Emails() {
   const [replyText, setReplyText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [message, setMessage] = useState(null);
+  const [emails, setEmails] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
 
-  // Sample local emails (no external calls)
-  const [emails, setEmails] = useState([
-    { id: '1', from_name: 'Alice', from_email: 'alice@example.com', subject: 'Proposal', body: 'Hey — please review the attached proposal.', received_date: new Date().toISOString(), is_read: false, is_archived: false, resume_url: null, message_id: 'm1' },
-    { id: '2', from_name: 'Bob', from_email: 'bob@example.com', subject: 'Invoice', body: 'Invoice for last month attached.', received_date: new Date().toISOString(), is_read: true, is_archived: false, resume_url: null, message_id: 'm2' },
-  ]);
+  const formatDate = (value, dateFormat) => {
+    if (!value) return "Unknown";
+    const parsedDate = new Date(value);
 
-  const sendActionToN8n = async (email, action, body = null) => {
-    // In standalone mode we simulate success
-    console.log('Simulated n8n call for', action, email.id, body);
-    return Promise.resolve({ ok: true });
+    if (Number.isNaN(parsedDate.getTime())) {
+      return "Unknown";
+    }
+
+    try {
+      return format(parsedDate, dateFormat);
+    } catch (error) {
+      console.error("Failed to format date", error);
+      return "Unknown";
+    }
+  };
+
+  const getPreviewText = (text) => {
+    if (!text) return "No preview available";
+    const trimmed = text.slice(0, 80);
+    return text.length > 80 ? `${trimmed}...` : trimmed;
+  };
+
+  const fetchEmails = useCallback(async () => {
+    setIsFetching(true);
+
+    try {
+      const response = await fetch("/api/emails");
+      const responseText = await response.text();
+      let parsedPayload = {};
+
+      if (responseText) {
+        try {
+          parsedPayload = JSON.parse(responseText);
+        } catch (error) {
+          throw new Error("Unable to parse server response when loading emails.");
+        }
+      }
+
+      if (!response.ok) {
+        const errorMessage =
+          (parsedPayload && typeof parsedPayload === "object" ? parsedPayload.message : undefined) ||
+          responseText ||
+          `Failed to load emails (${response.status}).`;
+        throw new Error(errorMessage);
+      }
+
+      const payload = parsedPayload;
+      const fetchedEmails = Array.isArray(payload)
+        ? payload
+        : payload && typeof payload === "object" && Array.isArray(payload.emails)
+        ? payload.emails
+        : payload && typeof payload === "object" && Array.isArray(payload.data)
+        ? payload.data
+        : [];
+      const normalized = fetchedEmails.map((email) => ({
+        ...email,
+        id: String(email.id),
+        message_id: email.message_id != null ? String(email.message_id) : undefined,
+        received_date: email.received_date ?? new Date().toISOString(),
+        body: email.body ?? "",
+        is_read: email.is_read ?? false,
+        is_archived: email.is_archived ?? false,
+      }));
+
+      setEmails(normalized);
+      setSelectedEmail((prev) => {
+        if (!prev) return null;
+        return normalized.find((email) => email.id === prev.id) ?? null;
+      });
+      setMessage((prev) => (prev?.type === "error" ? null : prev));
+    } catch (error) {
+      console.error("Failed to load emails:", error);
+      setMessage({ type: "error", text: error.message || "Failed to load emails." });
+    } finally {
+      setIsFetching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchEmails();
+  }, [fetchEmails]);
+
+  const sendActionToN8n = async (email, action, replyBody = null) => {
+    const response = await fetch(`/api/emails/${encodeURIComponent(email.id)}/actions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action,
+        ...(action === "reply" && replyBody ? { replyBody } : {}),
+        email,
+      }),
+    });
+
+    const responseText = await response.text();
+    let payload = {};
+
+    if (responseText) {
+      try {
+        payload = JSON.parse(responseText);
+      } catch (error) {
+        if (!response.ok) {
+          throw new Error(responseText);
+        }
+
+        payload = { message: responseText };
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(payload?.message || responseText || `Action failed with status ${response.status}.`);
+    }
+
+    return payload;
   };
 
   const handleSelectEmail = (email) => {
-    setSelectedEmail(email);
+    const nextSelected = email.is_read ? email : { ...email, is_read: true };
+    setSelectedEmail(nextSelected);
     setIsReplying(false);
     setReplyText("");
     setMessage(null);
 
-    // Mark as read in local state
     if (!email.is_read) {
-      setEmails((prev) => prev.map((e) => (e.id === email.id ? { ...e, is_read: true } : e)));
+      setEmails((prev) => prev.map((e) => (e.id === email.id ? nextSelected : e)));
     }
   };
 
   const handleArchive = async (email) => {
-    if (!email.resume_url) {
-      setMessage({ type: "error", text: "Cannot archive: No resume URL available" });
-      return;
-    }
-
     try {
-      await sendActionToN8n(email, 'archive');
+      const result = await sendActionToN8n(email, "archive");
       setEmails((prev) => prev.map((e) => (e.id === email.id ? { ...e, is_archived: true } : e)));
       setSelectedEmail(null);
-      setMessage({ type: "success", text: "Email archived successfully" });
+      setMessage({ type: "success", text: result?.message || "Email archived successfully" });
     } catch (error) {
       console.error("Failed to archive:", error);
       setMessage({ type: "error", text: `Failed to archive email: ${error.message}.` });
@@ -55,20 +157,15 @@ export default function Emails() {
   };
 
   const handleDelete = async (email) => {
-    if (!email.resume_url) {
-      setMessage({ type: "error", text: "Cannot delete: No resume URL available" });
-      return;
-    }
-
     if (!window.confirm("Are you sure you want to delete this email?")) {
       return;
     }
 
     try {
-      await sendActionToN8n(email, 'delete');
+      const result = await sendActionToN8n(email, "delete");
       setEmails((prev) => prev.filter((e) => e.id !== email.id));
       setSelectedEmail(null);
-      setMessage({ type: "success", text: "Email deleted" });
+      setMessage({ type: "success", text: result?.message || "Email deleted" });
     } catch (error) {
       console.error("Failed to delete:", error);
       setMessage({ type: "error", text: `Failed to delete email: ${error.message}.` });
@@ -76,27 +173,23 @@ export default function Emails() {
   };
 
   const handleSendReply = async () => {
-    if (!replyText.trim() || !selectedEmail) return;
-
-    if (!selectedEmail.resume_url) {
-      setMessage({ type: "error", text: "Cannot reply: No resume URL available" });
-      return;
-    }
+    const trimmedReply = replyText.trim();
+    if (!trimmedReply || !selectedEmail) return;
 
     setIsSending(true);
     setMessage(null);
 
     try {
-      await sendActionToN8n(selectedEmail, 'reply', replyText);
+      const result = await sendActionToN8n(selectedEmail, "reply", trimmedReply);
       setReplyText("");
       setIsReplying(false);
-      setMessage({ type: "success", text: "Reply sent successfully!" });
+      setMessage({ type: "success", text: result?.message || "Reply sent successfully!" });
     } catch (error) {
       console.error("Failed to send reply:", error);
       setMessage({ type: "error", text: `Failed to send reply: ${error.message}.` });
+    } finally {
+      setIsSending(false);
     }
-
-    setIsSending(false);
   };
 
   const activeEmails = emails.filter((e) => !e.is_archived);
@@ -109,8 +202,8 @@ export default function Emails() {
       </div>
 
       {message && (
-        <Alert className={`${message.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <AlertDescription className={message.type === 'success' ? 'text-green-800' : 'text-red-800'}>
+        <Alert className={`${message.type === "success" ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+          <AlertDescription className={message.type === "success" ? "text-green-800" : "text-red-800"}>
             {message.text}
           </AlertDescription>
         </Alert>
@@ -121,11 +214,27 @@ export default function Emails() {
         <div className="lg:col-span-2">
           <Card className="shadow-xl border-0 overflow-hidden">
             <CardHeader className="border-b border-slate-100">
-              <CardTitle>Inbox ({activeEmails.length})</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Inbox ({activeEmails.length})</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={fetchEmails}
+                  disabled={isFetching}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
-                {activeEmails.length === 0 ? (
+                {isFetching && activeEmails.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <p>Loading emails...</p>
+                  </div>
+                ) : activeEmails.length === 0 ? (
                   <div className="text-center py-12 text-slate-500">
                     <p>No emails yet</p>
                   </div>
@@ -134,22 +243,23 @@ export default function Emails() {
                     <div
                       key={email.id}
                       onClick={() => handleSelectEmail(email)}
-                      className={`p-4 cursor-pointer transition-all hover:bg-slate-50 ${selectedEmail?.id === email.id ? 'bg-blue-50' : ''
-                        } ${!email.is_read ? 'bg-blue-50/30' : ''}`}
+                      className={`p-4 cursor-pointer transition-all hover:bg-slate-50 ${
+                        selectedEmail?.id === email.id ? "bg-blue-50" : ""
+                      } ${!email.is_read ? "bg-blue-50/30" : ""}`}
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className={`text-slate-900 truncate ${!email.is_read ? 'font-bold' : 'font-medium'}`}>
-                          {email.from_name || email.from_email}
+                        <p className={`text-slate-900 truncate ${!email.is_read ? "font-bold" : "font-medium"}`}>
+                          {email.from_name || email.from_email || "Unknown sender"}
                         </p>
                         <span className="text-xs text-slate-500 whitespace-nowrap">
-                          {format(new Date(email.received_date), 'MMM d')}
+                          {formatDate(email.received_date, "MMM d")}
                         </span>
                       </div>
-                      <p className={`text-sm truncate mb-1 ${!email.is_read ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
-                        {email.subject}
+                      <p className={`text-sm truncate mb-1 ${!email.is_read ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+                        {email.subject || "(No subject)"}
                       </p>
-                      <p className={`text-sm text-slate-500 truncate ${!email.is_read ? 'font-medium' : ''}`}>
-                        {email.body.substring(0, 80)}...
+                      <p className={`text-sm text-slate-500 truncate ${!email.is_read ? "font-medium" : ""}`}>
+                        {getPreviewText(email.body)}
                       </p>
                     </div>
                   ))
@@ -175,19 +285,11 @@ export default function Emails() {
                   </Button>
 
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsReplying(!isReplying)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setIsReplying(!isReplying)}>
                       <Reply className="w-4 h-4 mr-2" />
                       Reply
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleArchive(selectedEmail)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => handleArchive(selectedEmail)}>
                       <Archive className="w-4 h-4 mr-2" />
                       Archive
                     </Button>
@@ -203,23 +305,21 @@ export default function Emails() {
                   </div>
                 </div>
 
-                <h2 className="text-2xl font-bold text-slate-900 mb-4">{selectedEmail.subject}</h2>
+                <h2 className="text-2xl font-bold text-slate-900 mb-4">{selectedEmail.subject || "(No subject)"}</h2>
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-semibold text-slate-900">{selectedEmail.from_name || selectedEmail.from_email}</p>
-                    <p className="text-sm text-slate-500">{selectedEmail.from_email}</p>
+                    <p className="font-semibold text-slate-900">{selectedEmail.from_name || selectedEmail.from_email || "Unknown sender"}</p>
+                    <p className="text-sm text-slate-500">{selectedEmail.from_email || "No email available"}</p>
                   </div>
-                  <p className="text-sm text-slate-500">
-                    {format(new Date(selectedEmail.received_date), 'MMMM d, yyyy • h:mm a')}
-                  </p>
+                  <p className="text-sm text-slate-500">{formatDate(selectedEmail.received_date, "MMMM d, yyyy • h:mm a")}</p>
                 </div>
               </CardHeader>
 
               <CardContent className="p-6">
                 <div className="prose max-w-none mb-6">
                   <div className="whitespace-pre-wrap text-slate-700">
-                    {selectedEmail.body}
+                    {selectedEmail.body || "No content available for this email."}
                   </div>
                 </div>
 
