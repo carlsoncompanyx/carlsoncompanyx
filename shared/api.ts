@@ -10,3 +10,18 @@
 export interface DemoResponse {
   message: string;
 }
+
+export type EmailActionType = "reply" | "archive" | "delete";
+
+export interface EmailRecord {
+  id: string | number;
+  subject?: string | null;
+  body?: string | null;
+  from_name?: string | null;
+  from_email?: string | null;
+  received_date?: string | null;
+  is_read?: boolean | null;
+  is_archived?: boolean | null;
+  message_id?: string | number | null;
+  [key: string]: unknown;
+}

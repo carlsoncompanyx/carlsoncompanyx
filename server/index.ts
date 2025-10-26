@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
+import { handleEmailAction, handleGetEmails, handlePostEmails } from "./routes/emails";
 
 export function createServer() {
   const app = express();
@@ -18,6 +19,9 @@ export function createServer() {
   });
 
   app.get("/api/demo", handleDemo);
+  app.get("/api/emails", handleGetEmails);
+  app.post("/api/emails", handlePostEmails);
+  app.post("/api/emails/:emailId/actions", handleEmailAction);
 
   return app;
 }
