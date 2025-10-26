@@ -38,34 +38,34 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/" element={renderProtectedPage(<Home />)} />
-              <Route path="/Home" element={renderProtectedPage(<Home />)} />
-              <Route
-                path="/Finances"
-                element={renderProtectedPage(<Finances />)}
-              />
-              <Route path="/Metrics" element={renderProtectedPage(<Metrics />)} />
-              <Route path="/Emails" element={renderProtectedPage(<Emails />)} />
-              <Route
-                path="/ShortsGenerator"
-                element={renderProtectedPage(<ShortsGenerator />)}
-              />
-              <Route
-                path="/ProductCreate"
-                element={renderProtectedPage(<ProductCreate />)}
-              />
-              <Route
-                path="/Settings"
-                element={renderProtectedPage(<Settings />)}
-              />
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={renderProtectedPage(<Home />)} />
+            <Route path="/Home" element={renderProtectedPage(<Home />)} />
+            <Route
+              path="/Finances"
+              element={renderProtectedPage(<Finances />)}
+            />
+            <Route path="/Metrics" element={renderProtectedPage(<Metrics />)} />
+            <Route path="/Emails" element={renderProtectedPage(<Emails />)} />
+            <Route
+              path="/ShortsGenerator"
+              element={renderProtectedPage(<ShortsGenerator />)}
+            />
+            <Route
+              path="/ProductCreate"
+              element={renderProtectedPage(<ProductCreate />)}
+            />
+            <Route
+              path="/Settings"
+              element={renderProtectedPage(<Settings />)}
+            />
 
-              {/* catch-all */}
-              <Route path="*" element={renderProtectedPage(<NotFound />)} />
-            </Routes>
-          </BrowserRouter>
-        </NotificationProvider>
-      </AuthProvider>
+            {/* catch-all */}
+            <Route path="*" element={renderProtectedPage(<NotFound />)} />
+          </Routes>
+        </BrowserRouter>
+      </NotificationProvider>
+    </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

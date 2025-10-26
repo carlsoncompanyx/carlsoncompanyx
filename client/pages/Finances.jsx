@@ -6,6 +6,12 @@ import { useNotifications } from "@/hooks/use-notifications";
 
 export default function Finances() {
   const { session } = useAuth();
+  const {
+    taxPayments,
+    markTaxPaymentPaid,
+    markTaxPaymentUnpaid,
+    financeNotifications,
+  } = useNotifications();
   const [tab, setTab] = useState("reporting");
   const [date, setDate] = useState("");
   const [payee, setPayee] = useState("");
@@ -14,12 +20,6 @@ export default function Finances() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
   const [submissionSuccess, setSubmissionSuccess] = useState("");
-  const {
-    taxPayments,
-    markTaxPaymentPaid,
-    markTaxPaymentUnpaid,
-    financeNotifications,
-  } = useNotifications();
 
   const sortedTaxPayments = useMemo(
     () =>
@@ -67,7 +67,9 @@ export default function Finances() {
   return (
     <div>
       <h2 className="text-2xl font-semibold mb-4">Finances</h2>
-      <p className="text-sm text-slate-500 mb-6">Overview of your finances (mocked).</p>
+      <p className="text-sm text-slate-500 mb-6">
+        Overview of your finances (mocked).
+      </p>
 
       <div
         role="tablist"
@@ -435,110 +437,91 @@ export default function Finances() {
         )}
 
         {tab === "taxes" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-2xl shadow p-6">
-                <h3 className="text-lg font-semibold mb-3">Estimate</h3>
-                <p className="text-sm text-slate-500 mb-4">
-                  Estimated tax based on your mocked revenue and expenses.
-                </p>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-slate-500">Taxable Income</div>
-                  <div className="font-semibold text-slate-900">
-                    ${(totalRevenue - totalExpenses).toLocaleString()}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <div className="text-sm text-slate-500">Tax Rate</div>
-                  <div className="font-semibold text-slate-900">
-                    {Math.round(taxRate * 100)}%
-                  </div>
-                </div>
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-slate-500">Estimated Tax</div>
-                  <div className="text-2xl font-bold text-slate-900">
-                    ${estimatedTax.toLocaleString()}
-                  </div>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="bg-white rounded-2xl shadow p-6">
+              <h3 className="text-lg font-semibold mb-3">Estimate</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                Estimated tax based on your mocked revenue and expenses.
+              </p>
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-500">Taxable Income</div>
+                <div className="font-semibold text-slate-900">
+                  ${(totalRevenue - totalExpenses).toLocaleString()}
                 </div>
               </div>
-
-              <div className="bg-white rounded-2xl shadow p-6">
-                <h3 className="text-lg font-semibold mb-3">Notes</h3>
-                <p className="text-sm text-slate-500">
-                  This is a simple estimate using a flat tax rate for
-                  demonstration. Connect a real accounting service or Supabase
-                  records for accurate results.
-                </p>
+              <div className="flex items-center justify-between mt-2">
+                <div className="text-sm text-slate-500">Tax Rate</div>
+                <div className="font-semibold text-slate-900">
+                  {Math.round(taxRate * 100)}%
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-slate-500">Estimated Tax</div>
+                <div className="text-2xl font-bold text-slate-900">
+                  ${estimatedTax.toLocaleString()}
+                </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow p-6">
-              <div className="flex items-center justify-between gap-4">
+            <div className="bg-white rounded-2xl shadow p-6 xl:col-span-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold">Quarterly tax schedule</h3>
+                  <h3 className="text-lg font-semibold">Quarterly payments</h3>
                   <p className="text-sm text-slate-500">
-                    Badges in the header light up during the two weeks leading up
-                    to each due date and clear once you mark the payment as paid.
+                    We surface reminders starting two weeks before the quarter ends and keep them active until you mark the payment as paid.
                   </p>
                 </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                    financeNotifications > 0
-                      ? "bg-red-100 text-red-700"
-                      : "bg-emerald-100 text-emerald-700"
-                  }`}
-                >
-                  {financeNotifications > 0
-                    ? `${financeNotifications} attention`
-                    : "All clear"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Attention items
+                  </span>
+                  <span
+                    className={`inline-flex h-6 min-w-[2.5rem] items-center justify-center rounded-full px-2 text-xs font-semibold ${
+                      financeNotifications > 0
+                        ? "bg-red-100 text-red-700"
+                        : "bg-emerald-100 text-emerald-700"
+                    }`}
+                  >
+                    {financeNotifications > 0 ? `${financeNotifications} due soon` : "All clear"}
+                  </span>
+                </div>
               </div>
 
-              <div className="mt-4">
-                {financeNotifications > 0 ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
-                    {financeNotifications === 1
-                      ? "One quarterly payment needs attention within the next two weeks."
-                      : `${financeNotifications} quarterly payments need attention within the next two weeks.`}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                    You're all set for the next two weeks.
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 space-y-3">
+              <div className="mt-5 space-y-3">
                 {displayedTaxPayments.map((payment) => {
-                  const statusColor = payment.isPaid
-                    ? "text-emerald-600"
-                    : payment.needsAttention || payment.isOverdue
-                      ? "text-red-600"
-                      : "text-slate-500";
+                  const dueDate = new Date(payment.dueDate);
+                  let statusLabel = "Scheduled";
+                  let statusStyles = "bg-slate-100 text-slate-600";
+
+                  if (payment.isPaid) {
+                    statusLabel = "Paid";
+                    statusStyles = "bg-emerald-100 text-emerald-700";
+                  } else if (payment.isOverdue) {
+                    statusLabel = "Overdue";
+                    statusStyles = "bg-red-100 text-red-700";
+                  } else if (payment.needsAttention) {
+                    statusLabel = "Due soon";
+                    statusStyles = "bg-amber-100 text-amber-700";
+                  }
 
                   return (
                     <div
                       key={payment.id}
-                      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between"
+                      className="flex flex-col gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div>
                         <p className="text-sm font-semibold text-slate-800">
                           {payment.quarter} {payment.year}
                         </p>
                         <p className="text-xs text-slate-500">
-                          Due {dueDateFormatter.format(new Date(payment.dueDate))}
+                          Due {dueDateFormatter.format(dueDate)}
                         </p>
-                        <p className={`mt-1 text-xs font-medium ${statusColor}`}>
-                          {describeDueWindow(payment.daysUntilDue)}
-                          {!payment.isPaid && payment.needsAttention ? " • Needs attention" : ""}
-                          {!payment.isPaid && payment.isOverdue ? " • Overdue" : ""}
-                          {payment.isPaid ? " • Paid" : ""}
-                        </p>
+                        <p className="text-xs text-slate-500">{describeDueWindow(payment.daysUntilDue)}</p>
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className={`text-xs font-semibold uppercase ${statusColor}`}>
-                          {payment.isPaid ? "Paid" : payment.isOverdue ? "Overdue" : "Pending"}
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusStyles}`}>
+                          {statusLabel}
                         </span>
                         <button
                           type="button"
@@ -547,11 +530,7 @@ export default function Finances() {
                               ? markTaxPaymentUnpaid(payment.id)
                               : markTaxPaymentPaid(payment.id)
                           }
-                          className={`rounded-full px-4 py-1 text-xs font-semibold transition ${
-                            payment.isPaid
-                              ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                              : "bg-slate-900 text-white hover:bg-slate-800"
-                          }`}
+                          className="rounded-full border border-slate-200 px-4 py-1 text-xs font-medium text-slate-600 transition hover:bg-white"
                         >
                           {payment.isPaid ? "Mark unpaid" : "Mark paid"}
                         </button>
@@ -559,12 +538,6 @@ export default function Finances() {
                     </div>
                   );
                 })}
-
-                {sortedTaxPayments.length > displayedTaxPayments.length ? (
-                  <p className="text-center text-xs text-slate-500">
-                    Showing the next {displayedTaxPayments.length} payments.
-                  </p>
-                ) : null}
               </div>
             </div>
           </div>

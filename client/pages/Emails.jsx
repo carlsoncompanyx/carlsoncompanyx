@@ -100,7 +100,7 @@ export default function Emails() {
     setIsSending(false);
   };
 
-  const activeEmails = useMemo(() => emails.filter((e) => !e.is_archived), [emails]);
+  const activeEmails = emails.filter((e) => !e.is_archived);
 
   return (
     <div className="space-y-8">
