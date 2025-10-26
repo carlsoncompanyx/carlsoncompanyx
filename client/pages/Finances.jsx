@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import FinancialChart from "@/components/FinancialChart";
-import { fetchExpenses, fetchRevenues, insertExpense } from "@/lib/supabase";
+import { insertExpense } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { useFinancialData } from "@/hooks/use-financial-data";
 
 export default function Finances() {
   const { session } = useAuth();
@@ -13,54 +14,15 @@ export default function Finances() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
   const [submissionSuccess, setSubmissionSuccess] = useState("");
-  const [revenues, setRevenues] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [isLoadingFinancials, setIsLoadingFinancials] = useState(true);
-  const [financialError, setFinancialError] = useState("");
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadFinancials() {
-      setIsLoadingFinancials(true);
-      setFinancialError("");
-
-      try {
-        const [revenueData, expenseData] = await Promise.all([
-          fetchRevenues({
-            accessToken: session?.accessToken,
-            signal: controller.signal,
-          }),
-          fetchExpenses({
-            accessToken: session?.accessToken,
-            signal: controller.signal,
-          }),
-        ]);
-
-        setRevenues(Array.isArray(revenueData) ? revenueData : []);
-        setExpenses(Array.isArray(expenseData) ? expenseData : []);
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          return;
-        }
-
-        console.error("Failed to load financial data", error);
-        setFinancialError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load financial data.",
-        );
-      } finally {
-        setIsLoadingFinancials(false);
-      }
-    }
-
-    loadFinancials();
-
-    return () => {
-      controller.abort();
-    };
-  }, [session?.accessToken]);
+  const {
+    monthlyTotals,
+    chartData,
+    totals,
+    taxExpenses,
+    isLoading: isLoadingFinancials,
+    error: financialError,
+    refresh: refreshFinancials,
+  } = useFinancialData();
 
   const currencyFormatter = useMemo(
     () =>
@@ -71,176 +33,8 @@ export default function Finances() {
     [],
   );
 
-  const monthlyTotals = useMemo(() => {
-    const totals = new Map();
-
-    const normalizeAmount = (value) => {
-      if (typeof value === "number") {
-        return Number.isFinite(value) ? value : 0;
-      }
-
-      const parsed = Number(value ?? 0);
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
-
-    const resolveDate = (record) => {
-      if (record && typeof record.date === "string") {
-        return record.date;
-      }
-      if (record && typeof record.created_at === "string") {
-        return record.created_at;
-      }
-      return null;
-    };
-
-    const addRecord = (record, key) => {
-      const dateValue = resolveDate(record);
-      if (!dateValue) {
-        return;
-      }
-
-      const parsedDate = new Date(dateValue);
-      if (Number.isNaN(parsedDate.getTime())) {
-        return;
-      }
-
-      const amount = normalizeAmount(record?.amount);
-      if (!amount) {
-        return;
-      }
-
-      const monthKey = `${parsedDate.getFullYear()}-${String(
-        parsedDate.getMonth() + 1,
-      ).padStart(2, "0")}`;
-
-      if (!totals.has(monthKey)) {
-        totals.set(monthKey, { revenue: 0, expenses: 0 });
-      }
-
-      const entry = totals.get(monthKey);
-      entry[key] += amount;
-    };
-
-    revenues.forEach((record) => addRecord(record, "revenue"));
-    expenses.forEach((record) => addRecord(record, "expenses"));
-
-    return Array.from(totals.entries())
-      .sort((a, b) => (a[0] === b[0] ? 0 : a[0] < b[0] ? -1 : 1))
-      .map(([monthKey, { revenue, expenses }]) => {
-        const [year, month] = monthKey.split("-");
-        const labelDate = new Date(Number(year), Number(month) - 1, 1);
-        const period = labelDate.toLocaleString("en-US", {
-          month: "short",
-          year: "numeric",
-        });
-
-        return {
-          key: monthKey,
-          period,
-          revenue,
-          expenses,
-          profit: revenue - expenses,
-        };
-      });
-  }, [revenues, expenses]);
-
-  const totals = useMemo(() => {
-    const revenueTotal = monthlyTotals.reduce(
-      (sum, entry) => sum + entry.revenue,
-      0,
-    );
-    const expensesTotal = monthlyTotals.reduce(
-      (sum, entry) => sum + entry.expenses,
-      0,
-    );
-
-    const taxableIncome = Math.max(revenueTotal - expensesTotal, 0);
-    const taxRate = 0.21;
-    const estimatedTax = taxableIncome * taxRate;
-
-    return {
-      revenueTotal,
-      expensesTotal,
-      taxableIncome,
-      taxRate,
-      estimatedTax,
-    };
-  }, [monthlyTotals]);
-
-  const taxExpenses = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-
-    return expenses
-      .map((expense) => {
-        const dateValue =
-          (expense && typeof expense.date === "string" && expense.date) ||
-          (expense && typeof expense.created_at === "string" && expense.created_at);
-
-        if (!dateValue) {
-          return null;
-        }
-
-        const parsedDate = new Date(dateValue);
-        if (
-          Number.isNaN(parsedDate.getTime()) ||
-          parsedDate.getFullYear() !== currentYear
-        ) {
-          return null;
-        }
-
-        const potentialFields = [
-          expense?.category,
-          expense?.payee,
-          expense?.notes,
-          expense?.description,
-          expense?.memo,
-        ].filter((value) => typeof value === "string");
-
-        const isTaxRelated = potentialFields.some((value) =>
-          value.toLowerCase().includes("tax"),
-        );
-
-        if (!isTaxRelated) {
-          return null;
-        }
-
-        const amount =
-          typeof expense?.amount === "number"
-            ? expense.amount
-            : Number(expense?.amount ?? 0);
-
-        if (!Number.isFinite(amount) || amount === 0) {
-          return null;
-        }
-
-        return {
-          id: expense?.id || `tax-${parsedDate.toISOString()}`,
-          date: parsedDate,
-          payee:
-            (typeof expense?.payee === "string" && expense.payee) ||
-            (typeof expense?.category === "string" && expense.category) ||
-            "Tax Payment",
-          amount,
-          notes:
-            (typeof expense?.notes === "string" && expense.notes) ||
-            (typeof expense?.description === "string" && expense.description) ||
-            "",
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.date - b.date);
-  }, [expenses]);
-
-  const chartData = useMemo(
-    () =>
-      monthlyTotals.map((entry) => ({
-        period: entry.period,
-        revenue: entry.revenue,
-        expenses: entry.expenses,
-        profit: entry.profit,
-      })),
-    [monthlyTotals],
-  );
+  const chartDescription =
+    "Values are aggregated by month using revenue and expense entries from Supabase. Profit represents revenue minus expenses.";
 
   return (
     <div>
@@ -412,9 +206,7 @@ export default function Finances() {
                     About this chart
                   </p>
                   <p className="text-sm text-slate-600">
-                    Values are aggregated by month using revenue and expense
-                    entries from Supabase. Profit represents revenue minus
-                    expenses.
+                    {chartDescription}
                   </p>
                 </div>
               )}
@@ -549,6 +341,7 @@ export default function Finances() {
                   setPayee("");
                   setAmount("");
                   setIsRecurring(false);
+                  await refreshFinancials();
                 } catch (error) {
                   setSubmissionError(
                     error instanceof Error

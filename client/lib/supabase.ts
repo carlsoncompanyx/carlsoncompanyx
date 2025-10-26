@@ -19,6 +19,7 @@ export interface ExpensePayload {
 export type ExpenseRow = {
   id?: number | string;
   date?: string | null;
+  created_at?: string | null;
   payee?: string | null;
   recurring_expense?: boolean | null;
   amount?: number | null;
@@ -30,6 +31,7 @@ export type ExpenseRow = {
 export type RevenueRow = {
   id?: number | string;
   date?: string | null;
+  created_at?: string | null;
   amount?: number | null;
   description?: string | null;
   source?: string | null;
