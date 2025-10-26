@@ -37,14 +37,17 @@ export type FinancialChartPoint = {
   profit: number;
 };
 
+type FinancialChartProps = {
+  title?: string;
+  data?: FinancialChartPoint[] | null | undefined;
+};
+
 export default function FinancialChart({
   title = "Chart",
-  data,
-}: {
-  title?: string;
-  data: FinancialChartPoint[];
-}) {
-  const hasData = data.length > 0;
+  data = [],
+}: FinancialChartProps) {
+  const normalizedData = Array.isArray(data) ? data : [];
+  const hasData = normalizedData.length > 0;
 
   return (
     <div className="bg-white rounded-lg border border-slate-100 p-4 shadow-sm">
@@ -55,7 +58,10 @@ export default function FinancialChart({
       <div className="w-full overflow-hidden">
         {hasData ? (
           <ChartContainer config={chartConfig} className="h-64">
-            <LineChart data={data} margin={{ left: 16, right: 16, top: 10, bottom: 10 }}>
+            <LineChart
+              data={normalizedData}
+              margin={{ left: 16, right: 16, top: 10, bottom: 10 }}
+            >
               <CartesianGrid strokeDasharray="4 4" />
               <XAxis dataKey="period" tickLine={false} axisLine={false} />
               <YAxis
