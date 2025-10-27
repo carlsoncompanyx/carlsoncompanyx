@@ -6,6 +6,60 @@ import { ArrowLeft, Reply, Trash2, Archive, Send, RefreshCw } from "lucide-react
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+const normalizeEmailForClient = (email) => {
+  if (!email || typeof email !== "object") {
+    return null;
+  }
+
+  const idValue =
+    email.id ??
+    email.message_id ??
+    `generated-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  const normalizeBody = (value) => {
+    if (typeof value === "string") {
+      return value;
+    }
+
+    if (value == null) {
+      return "";
+    }
+
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch (error) {
+      console.error("Failed to normalize email body", error);
+      return String(value);
+    }
+  };
+
+  const rawLabels = Array.isArray(email.labels)
+    ? email.labels
+    : Array.isArray(email.labelIds)
+    ? email.labelIds
+    : [];
+
+  const labels = rawLabels
+    .map((label) => {
+      if (label == null) return null;
+      const text = String(label).trim();
+      return text ? text : null;
+    })
+    .filter(Boolean);
+
+  return {
+    ...email,
+    id: String(idValue),
+    message_id: email.message_id != null ? String(email.message_id) : undefined,
+    received_date: email.received_date ?? new Date().toISOString(),
+    body: normalizeBody(email.body),
+    is_read: email.is_read ?? false,
+    is_archived: email.is_archived ?? false,
+    is_starred: email.is_starred ?? false,
+    labels,
+  };
+};
+
 export default function Emails() {
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [isReplying, setIsReplying] = useState(false);
@@ -69,15 +123,9 @@ export default function Emails() {
         : payload && typeof payload === "object" && Array.isArray(payload.data)
         ? payload.data
         : [];
-      const normalized = fetchedEmails.map((email) => ({
-        ...email,
-        id: String(email.id),
-        message_id: email.message_id != null ? String(email.message_id) : undefined,
-        received_date: email.received_date ?? new Date().toISOString(),
-        body: email.body ?? "",
-        is_read: email.is_read ?? false,
-        is_archived: email.is_archived ?? false,
-      }));
+      const normalized = fetchedEmails
+        .map((email) => normalizeEmailForClient(email))
+        .filter(Boolean);
 
       setEmails(normalized);
       setSelectedEmail((prev) => {
@@ -97,7 +145,7 @@ export default function Emails() {
     fetchEmails();
   }, [fetchEmails]);
 
-  const sendActionToN8n = async (email, action, replyBody = null) => {
+  const sendEmailAction = async (email, action, replyBody = null) => {
     const response = await fetch(`/api/emails/${encodeURIComponent(email.id)}/actions`, {
       method: "POST",
       headers: {
@@ -129,6 +177,11 @@ export default function Emails() {
       throw new Error(payload?.message || responseText || `Action failed with status ${response.status}.`);
     }
 
+    if (payload && typeof payload === "object" && payload.email) {
+      const normalizedEmail = normalizeEmailForClient(payload.email);
+      return { ...payload, email: normalizedEmail };
+    }
+
     return payload;
   };
 
@@ -146,8 +199,17 @@ export default function Emails() {
 
   const handleArchive = async (email) => {
     try {
-      const result = await sendActionToN8n(email, "archive");
-      setEmails((prev) => prev.map((e) => (e.id === email.id ? { ...e, is_archived: true } : e)));
+      const result = await sendEmailAction(email, "archive");
+      const fallbackEmail = normalizeEmailForClient({ ...email, is_archived: true, is_read: true }) || {
+        ...email,
+        is_archived: true,
+        is_read: true,
+      };
+      const updatedEmail = result?.email || fallbackEmail;
+
+      setEmails((prev) =>
+        prev.map((e) => (e.id === email.id ? { ...e, ...updatedEmail, is_archived: true, is_read: true } : e)),
+      );
       setSelectedEmail(null);
       setMessage({ type: "success", text: result?.message || "Email archived successfully" });
     } catch (error) {
@@ -162,7 +224,7 @@ export default function Emails() {
     }
 
     try {
-      const result = await sendActionToN8n(email, "delete");
+      const result = await sendEmailAction(email, "delete");
       setEmails((prev) => prev.filter((e) => e.id !== email.id));
       setSelectedEmail(null);
       setMessage({ type: "success", text: result?.message || "Email deleted" });
@@ -180,7 +242,21 @@ export default function Emails() {
     setMessage(null);
 
     try {
-      const result = await sendActionToN8n(selectedEmail, "reply", trimmedReply);
+      const result = await sendEmailAction(selectedEmail, "reply", trimmedReply);
+      const fallbackEmail =
+        normalizeEmailForClient({
+          ...selectedEmail,
+          is_read: true,
+          last_reply_body: trimmedReply,
+        }) || {
+          ...selectedEmail,
+          is_read: true,
+          last_reply_body: trimmedReply,
+        };
+      const updatedEmail = result?.email || fallbackEmail;
+
+      setEmails((prev) => prev.map((e) => (e.id === updatedEmail.id ? { ...e, ...updatedEmail } : e)));
+      setSelectedEmail((prev) => (prev?.id === updatedEmail.id ? { ...prev, ...updatedEmail } : prev));
       setReplyText("");
       setIsReplying(false);
       setMessage({ type: "success", text: result?.message || "Reply sent successfully!" });

@@ -22,6 +22,14 @@ export interface EmailRecord {
   received_date?: string | null;
   is_read?: boolean | null;
   is_archived?: boolean | null;
+  is_starred?: boolean | null;
   message_id?: string | number | null;
+  thread_id?: string | number | null;
+  threadId?: string | number | null;
+  labels?: string[] | null;
+  resume_url?: string | null;
+  resumeUrl?: string | null;
+  last_reply_body?: string | null;
+  "return-path"?: string | null;
   [key: string]: unknown;
 }

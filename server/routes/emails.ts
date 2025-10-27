@@ -2,59 +2,11 @@ import type { RequestHandler } from "express";
 import { z } from "zod";
 import type { EmailActionType, EmailRecord } from "@shared/api";
 
-const EMAILS_FALLBACK_PATH = "/webhook/emails";
-const ACTION_FALLBACK_PATH = "/webhook/email-action";
-
-const n8nBaseUrl = process.env.N8N_BASE_URL?.replace(/\/$/, "");
-
-const resolveEndpoint = (envValue: string | undefined, fallbackPath: string) => {
-  if (!envValue) {
-    if (!n8nBaseUrl) {
-      return undefined;
-    }
-
-    return `${n8nBaseUrl}${fallbackPath}`;
-  }
-
-  if (envValue.startsWith("http")) {
-    return envValue;
-  }
-
-  if (!n8nBaseUrl) {
-    return undefined;
-  }
-
-  const normalizedPath = envValue.startsWith("/") ? envValue : `/${envValue}`;
-  return `${n8nBaseUrl}${normalizedPath}`;
-};
-
-const emailsUrl = resolveEndpoint(process.env.N8N_EMAILS_URL, EMAILS_FALLBACK_PATH);
-const actionUrl = resolveEndpoint(process.env.N8N_EMAIL_ACTION_URL, ACTION_FALLBACK_PATH);
-
-const apiToken = process.env.N8N_API_TOKEN;
-const bypassToken = process.env.N8N_PROTECTION_BYPASS_TOKEN?.trim();
-
-const withBypassParameters = (targetUrl: string) => {
-  if (!bypassToken) {
-    return { url: targetUrl, headers: {} as Record<string, string> };
-  }
-
-  try {
-    const parsedUrl = new URL(targetUrl);
-    parsedUrl.searchParams.set("x-vercel-protection-bypass", bypassToken);
-    parsedUrl.searchParams.set("x-vercel-set-bypass-cookie", "true");
-
-    return {
-      url: parsedUrl.toString(),
-      headers: { "x-vercel-protection-bypass": bypassToken },
-    };
-  } catch {
-    return {
-      url: targetUrl,
-      headers: { "x-vercel-protection-bypass": bypassToken },
-    };
-  }
-};
+const labelValueSchema = z.union([
+  z.array(z.union([z.string(), z.number()])),
+  z.string(),
+  z.number(),
+]);
 
 const baseEmailFields = {
   subject: z.string().optional().nullable(),
@@ -64,15 +16,17 @@ const baseEmailFields = {
   received_date: z.string().optional().nullable(),
   is_read: z.boolean().optional().nullable(),
   is_archived: z.boolean().optional().nullable(),
+  is_starred: z.boolean().optional().nullable(),
   message_id: z.union([z.string(), z.number()]).optional().nullable(),
+  thread_id: z.union([z.string(), z.number()]).optional().nullable(),
+  threadId: z.union([z.string(), z.number()]).optional().nullable(),
+  labels: labelValueSchema.optional().nullable(),
+  labelIds: labelValueSchema.optional().nullable(),
+  resume_url: z.string().optional().nullable(),
+  resumeUrl: z.string().optional().nullable(),
+  last_reply_body: z.string().optional().nullable(),
+  "return-path": z.string().optional().nullable(),
 };
-
-const EmailSchema = z
-  .object({
-    id: z.union([z.string(), z.number()]),
-    ...baseEmailFields,
-  })
-  .catchall(z.unknown());
 
 const LooseEmailSchema = z
   .object({
@@ -81,14 +35,6 @@ const LooseEmailSchema = z
   })
   .catchall(z.unknown());
 
-const EmailArraySchema = z.array(EmailSchema);
-
-const EmailsResponseSchema = z.union([
-  EmailArraySchema,
-  z.object({ emails: EmailArraySchema }),
-  z.object({ data: EmailArraySchema }),
-]);
-
 const IncomingEmailPayloadSchema = z.union([
   LooseEmailSchema,
   z.array(LooseEmailSchema),
@@ -96,8 +42,6 @@ const IncomingEmailPayloadSchema = z.union([
   z.object({ emails: z.array(LooseEmailSchema) }),
   z.object({ data: z.array(LooseEmailSchema) }),
 ]);
-
-type ParsedEmail = z.infer<typeof EmailSchema>;
 type LooseParsedEmail = z.infer<typeof LooseEmailSchema>;
 
 const normalizeDate = (value: string | undefined) => {
@@ -122,20 +66,179 @@ const resolveEmailId = (email: LooseParsedEmail) => {
   return `generated-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
+const isJsonLikeString = (value: string) => {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return false;
+  }
+
+  const firstChar = trimmed[0];
+  const lastChar = trimmed[trimmed.length - 1];
+
+  return (
+    (firstChar === "{" && lastChar === "}") ||
+    (firstChar === "[" && lastChar === "]") ||
+    (firstChar === '"' && lastChar === '"')
+  );
+};
+
+const parseJsonIfPossible = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  if (!isJsonLikeString(value)) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeBody = (value: unknown): string => {
+  const parsed = parseJsonIfPossible(value);
+
+  if (parsed == null) {
+    return "";
+  }
+
+  if (typeof parsed === "string") {
+    return parsed;
+  }
+
+  if (typeof parsed === "number" || typeof parsed === "boolean") {
+    return String(parsed);
+  }
+
+  try {
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return String(parsed);
+  }
+};
+
+const normalizeLabels = (value: unknown): string[] | undefined => {
+  const parsed = parseJsonIfPossible(value);
+
+  if (parsed == null) {
+    return undefined;
+  }
+
+  if (Array.isArray(parsed)) {
+    const normalized = parsed
+      .map((item) => {
+        if (item == null) {
+          return undefined;
+        }
+
+        const stringValue = String(item).trim();
+        return stringValue === "" ? undefined : stringValue;
+      })
+      .filter((item): item is string => item != null);
+
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  if (typeof parsed === "string") {
+    const trimmed = parsed.trim();
+    return trimmed ? [trimmed] : undefined;
+  }
+
+  if (typeof parsed === "number" || typeof parsed === "boolean") {
+    return [String(parsed)];
+  }
+
+  return undefined;
+};
+
+const normalizeOptionalString = (value: unknown): string | undefined => {
+  const parsed = parseJsonIfPossible(value);
+
+  if (parsed == null) {
+    return undefined;
+  }
+
+  if (typeof parsed === "string") {
+    return parsed;
+  }
+
+  if (typeof parsed === "number" || typeof parsed === "boolean") {
+    return String(parsed);
+  }
+
+  try {
+    return JSON.stringify(parsed);
+  } catch {
+    return String(parsed);
+  }
+};
+
 const normalizeEmail = (email: LooseParsedEmail): EmailRecord & { id: string } => {
   const id = resolveEmailId(email);
   const messageId = email.message_id == null ? undefined : String(email.message_id);
   const receivedDate = normalizeDate(email.received_date ?? undefined);
+  const labels = normalizeLabels(
+    (email as LooseParsedEmail & { labels?: unknown; labelIds?: unknown }).labels ??
+      (email as { labelIds?: unknown }).labelIds,
+  );
+  const threadValue = email.thread_id ?? (email as { threadId?: unknown }).threadId;
+  const normalizedThreadId =
+    threadValue == null || threadValue === "" ? undefined : String(threadValue);
+  const resumeUrl = normalizeOptionalString(
+    (email as LooseParsedEmail & { resume_url?: unknown; resumeUrl?: unknown }).resume_url ??
+      (email as { resumeUrl?: unknown }).resumeUrl,
+  );
+  const returnPath = normalizeOptionalString(
+    (email as LooseParsedEmail & { ["return-path"]?: unknown })["return-path"],
+  );
+  const record: Record<string, unknown> = { ...email };
 
-  return {
-    ...email,
-    id,
-    message_id: messageId,
-    received_date: receivedDate,
-    is_read: email.is_read ?? false,
-    is_archived: email.is_archived ?? false,
-    body: email.body ?? "",
-  };
+  record.id = id;
+  record.message_id = messageId;
+  record.received_date = receivedDate;
+  record.is_read = email.is_read ?? false;
+  record.is_archived = email.is_archived ?? false;
+  record.is_starred = email.is_starred ?? false;
+  record.body = normalizeBody(
+    (email as LooseParsedEmail & { body?: unknown; text?: unknown }).body ??
+      (email as { text?: unknown }).text ??
+      "",
+  );
+
+  if (labels) {
+    record.labels = labels;
+  } else {
+    delete record.labels;
+  }
+  delete record.labelIds;
+
+  if (normalizedThreadId) {
+    record.thread_id = normalizedThreadId;
+    (record as Record<string, unknown>).threadId = normalizedThreadId;
+  } else {
+    delete record.thread_id;
+    delete (record as Record<string, unknown>).threadId;
+  }
+
+  if (resumeUrl) {
+    record.resume_url = resumeUrl;
+    (record as Record<string, unknown>).resumeUrl = resumeUrl;
+  } else {
+    delete record.resume_url;
+    delete (record as Record<string, unknown>).resumeUrl;
+  }
+
+  if (returnPath) {
+    record["return-path"] = returnPath;
+  } else {
+    delete record["return-path"];
+  }
+
+  return record as EmailRecord & { id: string };
 };
 
 type NormalizedEmail = ReturnType<typeof normalizeEmail>;
@@ -217,77 +320,8 @@ const parseEmailPayload = (payload: unknown): NormalizedEmail[] => {
 
   return [normalizeEmail(data as LooseParsedEmail)];
 };
-
-const createAuthHeaders = () => {
-  if (!apiToken) {
-    return {};
-  }
-
-  return {
-    Authorization: `Bearer ${apiToken}`,
-  };
-};
-
-export const handleGetEmails: RequestHandler = async (_req, res) => {
-  if (!emailsUrl) {
-    res.json({ emails: getStoredEmails() });
-    return;
-  }
-
-  try {
-    const { url: resolvedUrl, headers: bypassHeaders } = withBypassParameters(emailsUrl);
-
-    const response = await fetch(resolvedUrl, {
-      headers: {
-        "Content-Type": "application/json",
-        ...createAuthHeaders(),
-        ...bypassHeaders,
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to retrieve emails from n8n (${response.status}): ${errorText}`);
-    }
-
-    const rawPayload = await response.json();
-    const parsed = EmailsResponseSchema.safeParse(rawPayload);
-
-    if (!parsed.success) {
-      throw new Error("Received an invalid email payload from n8n.");
-    }
-
-    const payload = parsed.data;
-    let emailList: ParsedEmail[] = [];
-
-    if (Array.isArray(payload)) {
-      emailList = payload;
-    } else if (payload && typeof payload === "object") {
-      const payloadObject = payload as { emails?: ParsedEmail[]; data?: ParsedEmail[] };
-
-      if (Array.isArray(payloadObject.emails)) {
-        emailList = payloadObject.emails;
-      } else if (Array.isArray(payloadObject.data)) {
-        emailList = payloadObject.data;
-      }
-    }
-
-    const normalizedEmails = emailList.map((email) => normalizeEmail(email));
-
-    upsertStoredEmails(normalizedEmails);
-
-    res.json({ emails: normalizedEmails });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    const fallbackEmails = getStoredEmails();
-
-    if (fallbackEmails.length > 0) {
-      res.json({ emails: fallbackEmails, message });
-      return;
-    }
-
-    res.status(500).json({ message });
-  }
+export const handleGetEmails: RequestHandler = (_req, res) => {
+  res.json({ emails: getStoredEmails() });
 };
 
 const EmailActionRequestSchema = z.object({
@@ -301,7 +335,9 @@ const applyActionToStore = (
   emailId: string,
   emailPayload?: LooseParsedEmail,
   replyBody?: string,
-) => {
+): NormalizedEmail | null => {
+  let currentEmail = emailStore.get(emailId) ?? null;
+
   if (emailPayload) {
     const enrichedEmail = { ...emailPayload, id: emailPayload.id ?? emailId };
     const parsedEmail = LooseEmailSchema.safeParse(enrichedEmail);
@@ -309,25 +345,35 @@ const applyActionToStore = (
     if (parsedEmail.success) {
       const normalized = normalizeEmail(parsedEmail.data);
       upsertStoredEmails([normalized]);
+      currentEmail = emailStore.get(normalized.id) ?? normalized;
     }
   }
 
   if (action === "archive") {
     updateStoredEmail(emailId, { is_archived: true, is_read: true });
-    return;
+    return emailStore.get(emailId) ?? currentEmail;
   }
 
   if (action === "delete") {
     emailStore.delete(emailId);
-    return;
+    return null;
   }
 
   if (action === "reply") {
     updateStoredEmail(emailId, { is_read: true, last_reply_body: replyBody ?? undefined });
+    return emailStore.get(emailId) ?? currentEmail;
   }
+
+  return currentEmail;
 };
 
-export const handleEmailAction: RequestHandler = async (req, res) => {
+const ACTION_MESSAGES: Record<EmailActionType, string> = {
+  reply: "Reply recorded successfully",
+  archive: "Email archived successfully",
+  delete: "Email deleted successfully",
+};
+
+export const handleEmailAction: RequestHandler = (req, res) => {
   const { emailId } = req.params;
 
   const parseResult = EmailActionRequestSchema.safeParse(req.body);
@@ -343,69 +389,12 @@ export const handleEmailAction: RequestHandler = async (req, res) => {
     res.status(400).json({ message: "Reply body is required when replying to an email." });
     return;
   }
+  const updatedEmail = applyActionToStore(action, emailId, email, replyBody);
 
-  const completeAction = (payload?: unknown) => {
-    applyActionToStore(action, emailId, email, replyBody);
-    res.json(payload ?? { message: "Action completed successfully" });
-  };
-
-  if (!actionUrl) {
-    completeAction({ message: "Action recorded locally" });
-    return;
-  }
-
-  try {
-    const { url: resolvedUrl, headers: bypassHeaders } = withBypassParameters(actionUrl);
-
-    const payload: Record<string, unknown> = {
-      action: action as EmailActionType,
-      emailId,
-    };
-
-    if (replyBody && action === "reply") {
-      payload.replyBody = replyBody;
-    }
-
-    if (email) {
-      payload.email = email;
-    }
-
-    const response = await fetch(resolvedUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...createAuthHeaders(),
-        ...bypassHeaders,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseText = await response.text();
-    let responseJson: unknown = null;
-
-    try {
-      responseJson = responseText ? JSON.parse(responseText) : null;
-    } catch (parseError) {
-      if (response.ok) {
-        responseJson = { message: responseText };
-      } else {
-        throw new Error(`Invalid JSON response from n8n: ${responseText}`);
-      }
-    }
-
-    if (!response.ok) {
-      const errorMessage =
-        typeof responseJson === "object" && responseJson && "message" in responseJson
-          ? String((responseJson as Record<string, unknown>).message)
-          : responseText || `n8n request failed with status ${response.status}`;
-      throw new Error(errorMessage);
-    }
-
-    completeAction(responseJson ?? { message: "Action completed successfully" });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    res.status(500).json({ message });
-  }
+  res.json({
+    message: ACTION_MESSAGES[action],
+    email: updatedEmail,
+  });
 };
 
 export const handlePostEmails: RequestHandler = (req, res) => {
