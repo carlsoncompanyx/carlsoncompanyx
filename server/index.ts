@@ -23,5 +23,10 @@ export function createServer() {
   app.post("/api/emails", handlePostEmails);
   app.post("/api/emails/:emailId/actions", handleEmailAction);
 
+  // Legacy compatibility for previous `/api/n8n-webhook` route
+  app.get("/api/n8n-webhook", handleGetEmails);
+  app.post("/api/n8n-webhook", handlePostEmails);
+  app.post("/api/n8n-webhook/:emailId/actions", handleEmailAction);
+
   return app;
 }
