@@ -1,27 +1,23 @@
-/**
- * Shared code between client and server
- * Useful to share types between client and server
- * and/or small pure JS functions that can be used on both client and server
- */
+// app/api/route.ts   ← one global endpoint
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  console.log("Incoming payload from n8n:", body);
 
-/**
- * Example response type for /api/demo
- */
-export interface DemoResponse {
-  message: string;
+  // TODO: decide how to route or store it.
+  // You could inspect body.source to branch logic.
+  // Example:
+  // if (body.source === "emails") { ... }
+  // if (body.source === "etsy") { ... }
+
+  return new Response(
+    JSON.stringify({ ok: true, received: body }),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  );
 }
 
-export type EmailActionType = "reply" | "archive" | "delete";
-
-export interface EmailRecord {
-  id: string | number;
-  subject?: string | null;
-  body?: string | null;
-  from_name?: string | null;
-  from_email?: string | null;
-  received_date?: string | null;
-  is_read?: boolean | null;
-  is_archived?: boolean | null;
-  message_id?: string | number | null;
-  [key: string]: unknown;
+export async function GET() {
+  return new Response(
+    JSON.stringify({ message: "API root alive" }),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  );
 }
