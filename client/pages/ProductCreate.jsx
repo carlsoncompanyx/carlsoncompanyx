@@ -1,6 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { Image, Tag, DollarSign, Save, ArrowLeft, Loader2, Info, ListChecks, X, PaintBucket, ImagePlus, CloudUpload, Zap, Send } from 'lucide-react';
 
+// =================================================================================
+// # API & CONFIGURATION BLOCK: DO NOT EDIT THE KEYS IN THIS BLOCK IF YOU HAVE ALREADY CONFIGURED THEM
+// =================================================================================
+const apiConfig = {
+  // # SUPABASE CONFIGURATION
+  // 1. YOUR SUPABASE REST URL (e.g., https://[project_ref].supabase.co)
+  supabase_api_url: "YOUR_SUPABASE_REST_URL_HERE",
+  // 2. YOUR SUPABASE ANON PUBLIC KEY
+  supabase_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrcXBocm9nZXh5emh3aWZ1a3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NjIyNjcsImV4cCI6MjA3NjUzODI2N30.L3rWgtCxc3aec1zCLe_TZfep2PdJ_8i9Dhp_ob0Kldw",
+  // Note: Your ID 30767 can be used here if it's part of a flow key or project ID:
+  supabase_project_id: "30767", 
+  
+  // # N8N/RUNPOD FLOW WEBHOOKS (For triggering external actions)
+  // # 1. Flow to fetch images from your local PC (I:\Images-Initial), upload them to storage, and return URLs.
+  n8n_initial_fetch_webhook: "YOUR_N8N_WEBHOOK_FOR_INITIAL_IMAGE_FETCH", 
+  
+  // # 2. Flow to publish a draft listing using selected pre-processed images.
+  n8n_publish_draft_webhook: "YOUR_N8N_WEBHOOK_FOR_PUBLISH_DRAFT",
+  
+  // # 3. AI Modification Endpoint (e.g., RunPod or specialized n8n flow for image-to-image)
+  ai_modify_endpoint: "YOUR_RUNPOD_OR_N8N_WEBHOOK_FOR_AI_MODIFY",
+  
+  // # 4. Flow to publish a draft listing using the newly modified image.
+  n8n_publish_custom_draft_webhook: "YOUR_N8N_WEBHOOK_FOR_PUBLISH_CUSTOM_DRAFT",
+  
+  // # 5. AI Upscaling Endpoint (e.g., RunPod or specialized n8n flow for super-resolution)
+  ai_upscale_endpoint: "YOUR_RUNPOD_OR_N8N_WEBHOOK_FOR_AI_UPSCALE",
+  
+  // # Shared Auth/Token (If flows are secured)
+  flow_auth_token: "YOUR_SHARED_SECRET_API_TOKEN", 
+};
+// =================================================================================
+
+
 // Mock state structure for the product
 const initialProductState = {
   title: '',
@@ -13,29 +47,27 @@ const initialProductState = {
   shippingOrigin: 'USA',
   processingTime: '1-3 business days',
   tags: [],
-  images: [], // Now holds mock image objects with score/style/selection
+  images: [], 
 };
 
-// Mock Supabase data for the image categories (Image Prompts section)
+// MOCK DATA for Image Prompts: Topics & Styles (Used as fallback/initial state)
+// NOTE: I am updating this mock data to use 'topic' and 'styleSplit' to match the request.
 const mockCategoryData = [
-  { topic: 'Engagement', style: 'Vintage' },
-  { topic: 'Wedding', style: 'Bohemian' },
-  { topic: 'Birthdays', 'style': 'Geometric' },
-  { topic: 'Anniversary', style: 'Art Deco' },
-  { topic: 'Casual Wear', style: 'Minimal' },
+  { id: 1, topic: 'Engagement Ring Box', styleSplit: '50% Elegant, 50% Minimal' },
+  { id: 2, topic: 'Bohemian Wall Hanging', styleSplit: '70% Macrame, 30% Geometric' },
+  { id: 3, topic: 'Abstract Birthday Card', styleSplit: '90% Watercolor, 10% Line Art' },
 ];
 
-// Mock data for images, simulating a "desktop folder" load. Sorted by score (high to low).
-const mockImageData = [
-    { id: 1, url: "https://placehold.co/150x150/4f46e5/ffffff?text=A_98", filename: 'mug_vintage_01.jpg', style: 'Vintage', score: 98, selected: false },
-    { id: 2, url: "https://placehold.co/150x150/6366f1/ffffff?text=B_95", filename: 'mug_bohemian_02.jpg', style: 'Bohemian', score: 95, selected: false },
-    { id: 3, url: "https://placehold.co/150x150/818cf8/ffffff?text=C_92", filename: 'mug_geometric_03.jpg', style: 'Geometric', score: 92, selected: false },
-    { id: 4, url: "https://placehold.co/150x150/a5b4fc/ffffff?text=D_85", filename: 'mug_artdeco_04.jpg', style: 'Art Deco', score: 85, selected: false },
-    { id: 5, url: "https://placehold.co/150x150/c7d2fe/ffffff?text=E_79", filename: 'mug_minimal_05.jpg', style: 'Minimal', score: 79, selected: false },
-    { id: 6, url: "https://placehold.co/150x150/eef2ff/4f46e5?text=F_60", filename: 'mug_farmhouse_06.jpg', style: 'Farmhouse', score: 60, selected: false },
-    { id: 7, url: "https://placehold.co/150x150/f0ab00/ffffff?text=G_75", filename: 'abstract_gold.jpg', style: 'Abstract', score: 75, selected: false },
-    { id: 8, url: "https://placehold.co/150x150/78350f/ffffff?text=H_88", filename: 'nature_scene.jpg', style: 'Nature', score: 88, selected: false },
-];
+// --- Helper Functions for API Calls ---
+
+// A mock function to simulate converting a file to a Base64 string for API payload
+const fileToBase64 = (file) => {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.readAsDataURL(file);
+    });
+};
 
 // Component for the large image preview modal
 const ImageModal = ({ isOpen, onClose, imageUrl }) => {
@@ -68,54 +100,156 @@ const ProductCreatePage = () => {
   const [product, setProduct] = useState(initialProductState);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  const [isImageLoading, setIsImageLoading] = useState(true);
 
   // Listing Configuration State
   const [aspectRatio, setAspectRatio] = useState('3:2');
-  const [productTypes, setProductTypes] = useState([]); // Multi-select array
+  const [productTypes, setProductTypes] = useState([]); 
   
   // Custom Photo State
   const [originalPhotoUrl, setOriginalPhotoUrl] = useState("https://placehold.co/300x400/374151/ffffff?text=Upload+Original+Photo");
-  // Updated to neutral placeholder
   const [modifiedPhotoUrl, setModifiedPhotoUrl] = useState("https://placehold.co/300x400/9ca3af/ffffff?text=A.I.+Output"); 
   const [selectedArtStyle, setSelectedArtStyle] = useState('Watercolor');
-  const [originalFile, setOriginalFile] = useState(null); // To store the uploaded file object
+  const [originalFile, setOriginalFile] = useState(null); 
 
   // Upscale Photo State
   const [upscaleOriginalUrl, setUpscaleOriginalUrl] = useState("https://placehold.co/300x400/f59e0b/ffffff?text=Low+Res+Input");
-  // Updated to neutral placeholder
   const [upscaleModifiedUrl, setUpscaleModifiedUrl] = useState("https://placehold.co/300x400/9ca3af/ffffff?text=A.I.+Output");
   const [selectedUpscaleModel, setSelectedUpscaleModel] = useState('Standard');
-  const [upscaleOriginalFile, setUpscaleOriginalFile] = useState(null); // New state for Upscale file object
+  const [upscaleOriginalFile, setUpscaleOriginalFile] = useState(null); 
 
-
-  // New states for the Category Updater Table
+  // Category Updater Table State (Data fetched from Supabase)
   const [imageCategories, setImageCategories] = useState([]);
   const [isCategoryLoading, setIsCategoryLoading] = useState(true);
+  const [isCategoryUpdating, setIsCategoryUpdating] = useState(false);
   const [categoryError, setCategoryError] = useState('');
     
-  // New states for the Image Modal
+  // Image Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalImageUrl, setModalImageUrl] = useState('');
-  const [isImageLoading, setIsImageLoading] = useState(true);
 
-  // --- Mock Supabase Fetch & Image Load on Component Mount ---
+
+  // --- Supabase and Initial Image Load on Component Mount ---
+  
+  // Function to fetch categories from Supabase (Used in useEffect and refresh)
+  const fetchCategories = async () => {
+      // # 1. SUPABASE INTEGRATION BLOCK: Load Image Categories (Topics & Styles)
+      setIsCategoryLoading(true);
+      setCategoryError('');
+      
+      // Check for config presence
+      if (apiConfig.supabase_api_url === "https://ckqphrogexyzhwifuksr.supabase.co/rest/v1/etsytopics?select=topic") {
+          setCategoryError("Please configure 'supabase_api_url' and 'supabase_anon_key' in apiConfig. Using mock data.");
+          setImageCategories(mockCategoryData);
+          setIsCategoryLoading(false);
+          return;
+      }
+      
+      const SUPABASE_TABLE_NAME = 'etsytopics'; // Assuming this is your table name
+
+      try {
+          // # Fetch categories from your Supabase table
+          const response = await fetch(`https://ckqphrogexyzhwifuksr.supabase.co/rest/v1/etsytopics?select=*`, {
+              headers: {
+                  'apikey': apiConfig.supabase_anon_key,
+                  'Authorization': `Bearer ${apiConfig.supabase_anon_key}`,
+              },
+          });
+
+          if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ message: 'Could not parse error response.' }));
+              const errorMessage = `Supabase fetch failed (Status: ${response.status}). Message: ${errorData.message || 'Unknown error'}`;
+              console.error(errorMessage);
+              setCategoryError(errorMessage + '. Using mock data.');
+              setImageCategories(mockCategoryData);
+              return;
+          }
+
+          const data = await response.json();
+          // Map data to ensure it has 'topic' and 'styleSplit'
+          const processedData = data.map(item => ({
+            id: item.id,
+            topic: item.topic || '',
+            styleSplit: item.style_split || '',
+          }));
+          
+          setImageCategories(processedData.length > 0 ? processedData : mockCategoryData);
+
+      } catch (err) {
+          // Catch network errors (e.g., CORS, no connection)
+          const errorMessage = `Failed to load categories due to network error: ${err.message}.`;
+          console.error(errorMessage, err);
+          setCategoryError(errorMessage + ' Using mock data.');
+          setImageCategories(mockCategoryData);
+      } finally {
+          setIsCategoryLoading(false);
+      }
+  };
+
+
   useEffect(() => {
-    // 1. Simulate fetching image categories
-    setTimeout(() => {
-      setImageCategories(mockCategoryData);
-      setIsCategoryLoading(false);
-    }, 800);
     
-    // 2. Simulate loading images from "desktop folder"
-    setTimeout(() => {
-        // Load and sort the mock data initially by score (desc)
-        const sortedImages = mockImageData.sort((a, b) => b.score - a.score);
-        setProduct(prev => ({ 
-            ...prev, 
-            images: sortedImages
-        }));
-        setIsImageLoading(false);
-    }, 500);
+    fetchCategories();
+    
+    // # 2. N8N INTEGRATION BLOCK: Initial Image Fetch (Simulating I:\Images-Initial)
+    const triggerInitialImageFetchFlow = async () => {
+        setIsImageLoading(true);
+        
+        // Prevent triggering if webhook is not configured
+        if (apiConfig.n8n_initial_fetch_webhook === "YOUR_N8N_WEBHOOK_FOR_INITIAL_IMAGE_FETCH") {
+            setFormError("Please configure 'n8n_initial_fetch_webhook' in apiConfig. Using mock images.");
+            const mockFallback = [
+                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/4f46e5/ffffff?text=A_98", filename: 'mug_vintage_01.jpg', style: 'Vintage', score: 98, selected: false },
+                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/6366f1/ffffff?text=B_95", filename: 'mug_bohemian_02.jpg', style: 'Bohemian', score: 95, selected: false },
+                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/818cf8/ffffff?text=C_92", filename: 'mug_geometric_03.jpg', style: 'Geometric', score: 92, selected: false },
+            ];
+            setProduct(prev => ({ ...prev, images: mockFallback }));
+            setIsImageLoading(false);
+            return;
+        }
+        
+        console.log("Triggering n8n flow to fetch images from local PC and return URLs...");
+
+        try {
+            const response = await fetch(apiConfig.n8n_initial_fetch_webhook, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiConfig.flow_auth_token}`
+                },
+                // You can send contextual data to n8n if needed
+                body: JSON.stringify({ userId: 'current_user_id', projectId: apiConfig.supabase_project_id }) 
+            });
+            
+            const result = await response.json();
+            if (!response.ok || !Array.isArray(result.images)) {
+                // Assuming n8n returns an object like { success: true, images: [...] }
+                const message = result.message || `n8n did not return a valid image array (Status: ${response.status}).`;
+                console.error(message);
+                throw new Error(message);
+            }
+
+            const sortedImages = result.images.sort((a, b) => b.score - a.score);
+            setProduct(prev => ({ ...prev, images: sortedImages }));
+
+        } catch (error) {
+            console.error('Error triggering initial n8n fetch flow:', error.message);
+            // MOCK DATA FALLBACK (if n8n fails)
+            setFormError(`Initial image fetch failed: ${error.message}. Using mock image data.`);
+            
+            // Generate mock data structured as if it came from n8n
+            const mockFallback = [
+                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/4f46e5/ffffff?text=A_98", filename: 'mug_vintage_01.jpg', style: 'Vintage', score: 98, selected: false },
+                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/6366f1/ffffff?text=B_95", filename: 'mug_bohemian_02.jpg', style: 'Bohemian', score: 95, selected: false },
+                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/818cf8/ffffff?text=C_92", filename: 'mug_geometric_03.jpg', style: 'Geometric', score: 92, selected: false },
+            ];
+            setProduct(prev => ({ ...prev, images: mockFallback }));
+        } finally {
+            setIsImageLoading(false);
+        }
+    };
+
+    triggerInitialImageFetchFlow(); 
   }, []);
   // -----------------------------------------------------------
 
@@ -123,11 +257,10 @@ const ProductCreatePage = () => {
     const file = event.target.files[0];
     if (file) {
       setOriginalFile(file);
-      // Display the uploaded image
       const reader = new FileReader();
       reader.onloadend = () => {
         setOriginalPhotoUrl(reader.result);
-        setModifiedPhotoUrl("https://placehold.co/300x400/9ca3af/ffffff?text=A.I.+Output"); // Reset modified to neutral placeholder
+        setModifiedPhotoUrl("https://placehold.co/300x400/9ca3af/ffffff?text=A.I.+Output"); 
       };
       reader.readAsDataURL(file);
     }
@@ -140,17 +273,17 @@ const ProductCreatePage = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         setUpscaleOriginalUrl(reader.result);
-        setUpscaleModifiedUrl("https://placehold.co/300x400/9ca3af/ffffff?text=A.I.+Output"); // Reset modified to neutral placeholder
+        setUpscaleModifiedUrl("https://placehold.co/300x400/9ca3af/ffffff?text=A.I.+Output"); 
       };
       reader.readAsDataURL(file);
     }
 };
 
 
-  // Removed global handleSubmit as sections have their own buttons
   const handleSubmit = (e) => {
     e.preventDefault();
-    // No-op for global form submission
+    // In a real app, this would handle form submission logic
+    console.log("Form submission triggered (Prevented default behavior for demo)");
   };
   
   // --- Image Handlers ---
@@ -177,7 +310,7 @@ const ProductCreatePage = () => {
     );
   };
   
-  // --- Category Handlers ---
+  // --- Category Handlers (Supabase Update) ---
   
   const handleCategoryChange = (index, fieldName, value) => {
     setImageCategories(prev =>
@@ -190,10 +323,52 @@ const ProductCreatePage = () => {
     );
   };
 
-  const handleCategoryUpdate = () => {
-    console.log('Categories Updated:', imageCategories);
+  const handleCategoryUpdate = async () => {
+    // # 3. SUPABASE INTEGRATION BLOCK: Update Image Categories
+    
+    // Prevent updating if API URL is not configured
+    if (apiConfig.supabase_api_url === "YOUR_SUPABASE_REST_URL_HERE") {
+        setCategoryError("Please configure 'supabase_api_url' and 'supabase_anon_key' in apiConfig before updating.");
+        return;
+    }
+
+    setIsCategoryUpdating(true);
+    setCategoryError('');
+    const SUPABASE_TABLE_NAME = 'image_prompts'; 
+    
+    try {
+        // We use POST/upsert to update existing records or insert new ones.
+        const response = await fetch(`${apiConfig.supabase_api_url}/rest/v1/${SUPABASE_TABLE_NAME}`, {
+            method: 'POST',
+            headers: {
+                'apikey': apiConfig.supabase_anon_key,
+                'Authorization': `Bearer ${apiConfig.supabase_anon_key}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'resolution=merge-duplicates' // Use upsert/merge
+            },
+            // Ensure the data being sent matches the table schema (topic, styleSplit, id are present)
+            body: JSON.stringify(imageCategories.map(({ topic, styleSplit, id }) => ({ topic, styleSplit, id })))
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Could not parse error response.' }));
+            throw new Error(errorData.message || `Supabase update failed (Status: ${response.status}).`);
+        }
+
+        console.log('Categories successfully updated in Supabase.');
+        setCategoryError('Successfully saved changes to Supabase! Refreshing data...');
+        // Refetch data after successful update to ensure state matches DB
+        await fetchCategories();
+        setCategoryError('Successfully saved changes to Supabase!');
+        
+    } catch (err) {
+        setCategoryError(`Failed to update categories in Supabase: ${err.message}`);
+        console.error(err);
+    } finally {
+        setIsCategoryUpdating(false);
+    }
   };
-  // -----------------------------
+  // ---------------------------------------------
 
   const Section = ({ icon: Icon, title, children, isSmall = false }) => (
     <div className={`bg-white p-6 rounded-xl shadow-lg border border-gray-100 ${isSmall ? 'mb-4' : 'mb-8'}`}>
@@ -213,7 +388,7 @@ const ProductCreatePage = () => {
         return (
             <div className="flex justify-center items-center p-8 text-indigo-500 bg-gray-50 rounded-lg">
                 <Loader2 className="w-6 h-6 mr-3 animate-spin" />
-                Loading images from desktop folder...
+                Loading images... (n8n is fetching and uploading)
             </div>
         );
     }
@@ -222,7 +397,7 @@ const ProductCreatePage = () => {
         return (
             <div className="p-6 bg-yellow-100 text-yellow-800 rounded-lg flex items-center space-x-2">
                 <Info className="w-5 h-5" />
-                <p>No images loaded. Assuming images will be provided from a desktop source.</p>
+                <p>No images loaded. Check your n8n flow and configuration.</p>
             </div>
         );
     }
@@ -301,14 +476,57 @@ const ProductCreatePage = () => {
     );
   };
   
-  // --- Listing Configuration Controls (Moved below ImageTable) ---
+  // --- Listing Configuration Controls ---
   const ListingConfigurationControls = () => {
     const isReadyToPublish = product.images.some(img => img.selected) && aspectRatio && productTypes.length > 0;
 
+    const handlePublishDraft = async () => {
+        // # 4. EXTERNAL FLOW INTEGRATION BLOCK: Publish Draft (n8n/Etsy API)
+        
+        // Prevent publishing if webhook is not configured
+        if (apiConfig.n8n_publish_draft_webhook === "YOUR_N8N_WEBHOOK_FOR_PUBLISH_DRAFT") {
+            setFormError("Please configure 'n8n_publish_draft_webhook' in apiConfig before publishing.");
+            return;
+        }
+
+        const selectedImages = product.images.filter(img => img.selected);
+        setLoading(true);
+        setFormError('');
+
+        try {
+            const response = await fetch(apiConfig.n8n_publish_draft_webhook, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiConfig.flow_auth_token}`
+                },
+                body: JSON.stringify({
+                    listingData: {
+                        images: selectedImages.map(img => img.url),
+                        aspectRatio,
+                        productTypes,
+                        // Include other product data here
+                    },
+                    auth: {
+                        token: apiConfig.flow_auth_token,
+                    }
+                })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || 'Failed to trigger n8n workflow.');
+            console.log('n8n Publish Draft Flow triggered successfully:', result);
+            setFormError('Draft publishing flow successfully initiated!');
+
+        } catch (error) {
+            console.error('Error triggering Publish Draft flow:', error.message);
+            setFormError(`Failed to publish draft: ${error.message}. Check n8n logs.`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="border-t border-gray-200 pt-6 mt-6">
-            <h3 className="text-lg font-semibold text-gray-700 mb-4">Selected Image Configuration</h3>
-            
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {/* Aspect Ratio Dropdown */}
                 <div className="flex flex-col">
@@ -323,7 +541,6 @@ const ProductCreatePage = () => {
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
                     >
                         <option value="3:2">3:2 (Horizontal)</option>
-                        {/* Updated 4:3 label */}
                         <option value="4:3">4:3 (Horizontal)</option>
                         <option value="3:4">3:4 (Vertical)</option>
                     </select>
@@ -357,12 +574,12 @@ const ProductCreatePage = () => {
             <div className="flex justify-end mt-6">
                  <button
                     type="button"
-                    onClick={() => console.log('Publish Draft clicked with config:', { aspectRatio, productTypes })}
-                    disabled={!isReadyToPublish}
+                    onClick={handlePublishDraft}
+                    disabled={!isReadyToPublish || loading}
                     className="px-6 py-2 bg-green-600 text-white font-semibold rounded-full hover:bg-green-700 transition duration-150 shadow-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <Send className="w-5 h-5 mr-2" />
-                    Publish Draft
+                    {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
+                    {loading ? 'Triggering Flow...' : 'Publish Draft'}
                 </button>
             </div>
         </div>
@@ -372,19 +589,90 @@ const ProductCreatePage = () => {
   // --- Custom Photos Section (Section 2) ---
   const CustomPhotosSection = () => {
       const artStyles = ['Watercolor', 'Paint', 'Illustration', 'Photorealistic'];
+      const [modifyLoading, setModifyLoading] = useState(false);
       
-      const handleModify = () => {
+      const handleModify = async () => {
           if (!originalFile) return;
-          console.log(`Starting modification for file: ${originalFile.name} using style: ${selectedArtStyle}`);
-          // Mock modification logic (using indigo-600 color)
-          setModifiedPhotoUrl(`https://placehold.co/300x400/4f46e5/ffffff?text=Modified+as+${selectedArtStyle.substring(0, 4)}`);
+          
+          // Prevent modification if endpoint is not configured
+          if (apiConfig.ai_modify_endpoint === "YOUR_RUNPOD_OR_N8N_WEBHOOK_FOR_AI_MODIFY") {
+              setFormError("Please configure 'ai_modify_endpoint' in apiConfig before attempting AI modification.");
+              return;
+          }
+
+          // # 5. EXTERNAL FLOW INTEGRATION BLOCK: Image Modification (RunPod/n8n)
+          setModifyLoading(true);
+          setFormError('');
+          const base64Image = await fileToBase64(originalFile);
+          
+          try {
+              const response = await fetch(apiConfig.ai_modify_endpoint, {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiConfig.flow_auth_token}`
+                  },
+                  body: JSON.stringify({
+                      image_data: base64Image,
+                      art_style: selectedArtStyle,
+                      // You can add a prompt here if needed
+                  })
+              });
+              
+              const result = await response.json();
+              if (!response.ok || !result.modified_image_url) throw new Error('AI modification failed.');
+              
+              // Assuming the API returns a temporary public URL or a base64 encoded image
+              setModifiedPhotoUrl(result.modified_image_url);
+              setFormError('Image successfully modified by AI.');
+
+          } catch (error) {
+              console.error('Error running modification flow:', error.message);
+              setFormError(`Image modification failed: ${error.message}`);
+              // Fallback placeholder on error
+              setModifiedPhotoUrl("https://placehold.co/300x400/ef4444/ffffff?text=AI+ERROR"); 
+          } finally {
+              setModifyLoading(false);
+          }
       };
       
-      const handlePublishCustomDraft = () => {
-          // Check if it's still the neutral placeholder before attempting to publish
-          if (modifiedPhotoUrl.includes('9ca3af')) return; 
-          console.log('Publish Custom Draft clicked for modified photo.');
-          // Real logic would involve saving the modified image to storage and creating a draft listing
+      const handlePublishCustomDraft = async () => {
+          if (modifiedPhotoUrl.includes('9ca3af') || modifiedPhotoUrl.includes('AI+ERROR')) return; 
+          
+          // Prevent publishing if webhook is not configured
+          if (apiConfig.n8n_publish_custom_draft_webhook === "YOUR_N8N_WEBHOOK_FOR_PUBLISH_CUSTOM_DRAFT") {
+            setFormError("Please configure 'n8n_publish_custom_draft_webhook' in apiConfig before publishing.");
+            return;
+          }
+
+          // # 6. EXTERNAL FLOW INTEGRATION BLOCK: Publish Custom Draft (n8n/Etsy API)
+          setLoading(true);
+          setFormError('');
+
+          try {
+              const response = await fetch(apiConfig.n8n_publish_custom_draft_webhook, {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiConfig.flow_auth_token}`
+                  },
+                  body: JSON.stringify({
+                      image_url: modifiedPhotoUrl,
+                      art_style: selectedArtStyle,
+                      // Include other product data here
+                  })
+              });
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.message || 'Failed to trigger custom flow.');
+              console.log('n8n Custom Publish Draft Flow triggered successfully:', result);
+              setFormError('Custom draft publishing flow successfully initiated!');
+
+          } catch (error) {
+              console.error('Error triggering Custom Draft flow:', error.message);
+              setFormError(`Failed to publish custom draft: ${error.message}. Check n8n logs.`);
+          } finally {
+              setLoading(false);
+          }
       };
 
       return (
@@ -426,10 +714,14 @@ const ProductCreatePage = () => {
                 <div className="flex flex-col items-center w-full sm:w-1/2">
                     <h3 className="text-lg font-medium text-gray-700 mb-3">Modified Photo</h3>
                     <div className="w-full h-80 bg-gray-100 rounded-xl shadow-xl border-2 border-solid border-indigo-400 flex items-center justify-center overflow-hidden">
-                        {/* Check if modified photo is still the neutral placeholder */}
-                        {modifiedPhotoUrl.includes('9ca3af') ? ( 
+                        {/* If the image is loading, show spinner */}
+                        {modifyLoading ? (
+                            <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
+                        ) : modifiedPhotoUrl.includes('9ca3af') ? ( 
+                            // If it's the neutral placeholder
                              <ImagePlus className="w-12 h-12 text-indigo-400" />
                         ) : (
+                            // Show the modified image
                             <img src={modifiedPhotoUrl} alt="Modified" className="w-full h-full object-cover"/>
                         )}
                     </div>
@@ -462,23 +754,22 @@ const ProductCreatePage = () => {
                     <button
                         type="button"
                         onClick={handleModify}
-                        disabled={!originalFile}
+                        disabled={!originalFile || modifyLoading}
                         className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition duration-150 shadow-md flex items-center justify-center h-full sm:h-auto disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <PaintBucket className="w-5 h-5 mr-2" />
-                        Modify
+                        {modifyLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <PaintBucket className="w-5 h-5 mr-2" />}
+                        {modifyLoading ? 'Generating...' : 'Modify'}
                     </button>
                     
                     {/* Publish Custom Draft Button (Secondary Green) */}
                     <button
                         type="button"
                         onClick={handlePublishCustomDraft}
-                        // Check if modified photo is still the neutral placeholder
-                        disabled={modifiedPhotoUrl.includes('9ca3af')} 
+                        disabled={modifiedPhotoUrl.includes('9ca3af') || modifiedPhotoUrl.includes('AI+ERROR') || loading} 
                         className="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-150 shadow-md flex items-center justify-center h-full sm:h-auto disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <Save className="w-5 h-5 mr-2" />
-                        Publish Custom Draft
+                        {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />}
+                        {loading ? 'Triggering Flow...' : 'Publish Custom Draft'}
                     </button>
                 </div>
             </div>
@@ -486,15 +777,51 @@ const ProductCreatePage = () => {
       );
   };
 
-  // --- Upscale Photos Section (REPLACED Section 3) ---
+  // --- Upscale Photos Section (Section 3) ---
   const UpscalePhotosSection = () => {
       const upscaleModels = ['Standard', 'HQ (Large)', 'Premium (Max Detail)'];
-      
-      const handleUpscale = () => {
-          if (!upscaleOriginalFile) return; // Guard clause
-          console.log(`Starting upscale for file: ${upscaleOriginalFile.name} using model: ${selectedUpscaleModel}`);
-          // Mock upscale logic (using indigo-600 color)
-          setUpscaleModifiedUrl(`https://placehold.co/300x400/4f46e5/ffffff?text=Upscaled+by+${selectedUpscaleModel.split(' ')[0]}`);
+      const [upscaleLoading, setUpscaleLoading] = useState(false);
+
+      const handleUpscale = async () => {
+          if (!upscaleOriginalFile) return; 
+
+          // Prevent upscaling if endpoint is not configured
+          if (apiConfig.ai_upscale_endpoint === "YOUR_RUNPOD_OR_N8N_WEBHOOK_FOR_AI_UPSCALE") {
+            setFormError("Please configure 'ai_upscale_endpoint' in apiConfig before attempting AI upscale.");
+            return;
+          }
+
+          // # 7. EXTERNAL FLOW INTEGRATION BLOCK: Image Upscale (RunPod/n8n)
+          setUpscaleLoading(true);
+          setFormError('');
+          const base64Image = await fileToBase64(upscaleOriginalFile);
+
+          try {
+              const response = await fetch(apiConfig.ai_upscale_endpoint, {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiConfig.flow_auth_token}`
+                  },
+                  body: JSON.stringify({
+                      image_data: base64Image,
+                      model: selectedUpscaleModel,
+                  })
+              });
+              
+              const result = await response.json();
+              if (!response.ok || !result.upscaled_image_url) throw new Error('AI upscale failed.');
+              
+              setUpscaleModifiedUrl(result.upscaled_image_url);
+              setFormError('Image successfully upscaled by AI.');
+              
+          } catch (error) {
+              console.error('Error running upscale flow:', error.message);
+              setFormError(`Image upscale failed: ${error.message}`);
+              setUpscaleModifiedUrl("https://placehold.co/300x400/ef4444/ffffff?text=AI+ERROR");
+          } finally {
+              setUpscaleLoading(false);
+          }
       };
       
       return (
@@ -536,8 +863,10 @@ const ProductCreatePage = () => {
                 <div className="flex flex-col items-center w-full sm:w-1/2">
                     <h3 className="text-lg font-medium text-gray-700 mb-3">Modified Photo (High Res)</h3>
                     <div className="w-full h-80 bg-gray-100 rounded-xl shadow-xl border-2 border-solid border-red-400 flex items-center justify-center overflow-hidden">
-                        {/* Check if modified photo is still the neutral placeholder */}
-                        {upscaleModifiedUrl.includes('9ca3af') ? ( 
+                        {/* If the image is loading, show spinner */}
+                        {upscaleLoading ? (
+                            <Loader2 className="w-12 h-12 text-red-500 animate-spin" />
+                        ) : upscaleModifiedUrl.includes('9ca3af') ? ( 
                             <ImagePlus className="w-12 h-12 text-red-400" />
                         ) : (
                             <img src={upscaleModifiedUrl} alt="Upscaled High Res" className="w-full h-full object-cover"/>
@@ -572,13 +901,12 @@ const ProductCreatePage = () => {
                     <button
                         type="button"
                         onClick={handleUpscale}
-                        disabled={!upscaleOriginalFile}
+                        disabled={!upscaleOriginalFile || upscaleLoading}
                         className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition duration-150 shadow-md flex items-center justify-center h-full sm:h-auto disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <Zap className="w-5 h-5 mr-2" />
-                        Upscale
+                        {upscaleLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Zap className="w-5 h-5 mr-2" />}
+                        {upscaleLoading ? 'Upscaling...' : 'Upscale'}
                     </button>
-                    {/* Removed Publish Draft button */}
                 </div>
             </div>
           </>
@@ -588,54 +916,33 @@ const ProductCreatePage = () => {
 
   // --- Category Updater Table Component ---
   const CategoryUpdaterTable = () => {
-    const [isCategoryUpdating, setIsCategoryUpdating] = useState(false);
-
+    
     if (isCategoryLoading) {
       return (
         <div className="flex justify-center items-center p-4 text-indigo-500">
           <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-          Loading prompts...
+          Loading prompts from Supabase...
         </div>
       );
     }
     
-    if (categoryError) {
-      return (
-        <div className="p-4 bg-red-100 text-red-700 rounded-lg">
-          Error loading prompts: {categoryError}
-        </div>
-      );
-    }
-    
-    const handleUpdate = () => {
-        setIsCategoryUpdating(true);
-        setCategoryError('');
-        // Simulate sending data to Supabase (replace this with your actual Supabase POST/PUT call)
-        setTimeout(() => {
-          console.log('Categories Updated (Mock Supabase Write):', imageCategories);
-          setIsCategoryUpdating(false);
-          console.log('Image Categories updated successfully!');
-        }, 1200);
-    };
-
-
     return (
       <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="w-1/2 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Topics
+              <th className="w-1/2 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Topic
               </th>
-              <th className="w-1/2 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
-                Styles
+              <th className="w-1/2 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
+                Style Split
               </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {imageCategories.map((item, index) => (
-              <tr key={index} className="hover:bg-indigo-50/30 transition duration-100">
-                <td className="px-1 py-1">
+              <tr key={item.id || index} className="hover:bg-indigo-50/30 transition duration-100">
+                <td className="px-4 py-1">
                   <input
                     type="text"
                     value={item.topic}
@@ -644,12 +951,12 @@ const ProductCreatePage = () => {
                     className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
                   />
                 </td>
-                <td className="px-1 py-1 border-l border-gray-100">
+                <td className="px-4 py-1 border-l border-gray-100">
                   <input
                     type="text"
-                    value={item.style}
-                    onChange={(e) => handleCategoryChange(index, 'style', e.target.value)}
-                    placeholder="Style Name"
+                    value={item.styleSplit}
+                    onChange={(e) => handleCategoryChange(index, 'styleSplit', e.target.value)}
+                    placeholder="Style Split (e.g., 70% Watercolor)"
                     className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
                   />
                 </td>
@@ -659,8 +966,18 @@ const ProductCreatePage = () => {
         </table>
         
         <div className="p-3 bg-gray-50 flex justify-end border-t border-gray-200">
+          {/* Button to add a new row locally for a new configuration */}
           <button
-            onClick={handleUpdate}
+            onClick={() => setImageCategories(prev => [...prev, { topic: '', styleSplit: '', id: crypto.randomUUID() }])}
+            type="button"
+            className="px-4 py-1.5 bg-gray-400 text-white text-sm font-semibold rounded-full hover:bg-gray-500 transition duration-150 shadow-md flex items-center mr-3"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add New Row
+          </button>
+        
+          <button
+            onClick={handleCategoryUpdate}
             type="button"
             disabled={isCategoryUpdating}
             // Update Prompts Button (Primary Indigo)
@@ -671,79 +988,72 @@ const ProductCreatePage = () => {
             ) : (
               <ListChecks className="w-4 h-4 mr-2" />
             )}
-            {isCategoryUpdating ? 'Updating...' : 'Update Prompts'}
+            {isCategoryUpdating ? 'Updating...' : 'Save Changes'}
           </button>
         </div>
+        {categoryError && (
+            <div className={`p-3 text-xs rounded-b-lg ${categoryError.includes('Successfully') ? 'text-green-800 bg-green-50' : 'text-red-600 bg-red-50'}`}>
+                {categoryError}
+            </div>
+        )}
       </div>
     );
   };
   // ------------------------------------------------
 
   return (
-    // Set global font-inter
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-inter">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <header className="mb-8 flex items-center justify-between">
-          <button
-            onClick={() => console.log('Go back')} // Mock navigation
-            className="flex items-center text-indigo-600 hover:text-indigo-800 transition duration-150 font-semibold"
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" /> Back to Listings
-          </button>
-          <h1 className="text-3xl font-extrabold text-gray-900">Etsy Products</h1>
+        <header className="mb-8 flex items-center justify-center">
+          <h1 className="text-3xl font-extrabold text-gray-900">Etsy AI Manager</h1>
         </header>
 
-        {/* Removed global form submit handling */}
-        <form onSubmit={handleSubmit}>
-          
-          {/* Section 1: Create New Listings */}
-          <Section icon={Image} title="Create New Listings">
-            
-             <p className="text-sm text-gray-600 mb-4">
-                These images were loaded from your desktop folder. They are sorted by AI Score (highest to lowest). Select images to use for a new listing.
-             </p>
-            <ImageTable />
-
-            {/* Configuration Controls (Now below the table, contains Publish Draft button) */}
-            <ListingConfigurationControls />
-
-          </Section>
-
-          {/* Section 2: Custom Photos (Contains Modify and Publish Custom Draft buttons) */}
-          <Section icon={ImagePlus} title="Custom Photos">
-             <CustomPhotosSection />
-          </Section>
-
-
-          {/* Section 3: Upscale Photos (New Section) */}
-          <Section icon={Zap} title="Upscale Photos">
-            <UpscalePhotosSection />
-          </Section>
-
-          {/* Section 5: Image Prompts (Unchanged) */}
-          <Section icon={ListChecks} title="Image Prompts: Topics & Styles" isSmall>
-            <p className="text-xs text-gray-500 mb-2 -mt-2">
-              (Optional) Define 5 Topic and Style pairs used for image generation.
-            </p>
-            <CategoryUpdaterTable />
-          </Section>
-
-          {/* Error Message Display */}
-          {formError && (
-            <div className="flex items-center p-4 bg-red-100 text-red-700 rounded-lg mb-6 shadow-sm">
-              <Info className="w-5 h-5 mr-3 flex-shrink-0" />
-              <p className="font-medium">{formError}</p>
+        {formError && (
+            <div className="p-4 mb-6 text-sm text-red-700 bg-red-100 rounded-lg flex items-center shadow-md" role="alert">
+                <Info className="w-5 h-5 mr-2" />
+                <span>{formError}</span>
             </div>
-          )}
+        )}
 
+        <form onSubmit={handleSubmit}>
+            {/* Section 1: Initial Image Fetch & Listing Configuration */}
+            <Section icon={Image} title="1. Initial Image Processing & Listing Config">
+                <ImageTable />
+                <ListingConfigurationControls />
+            </Section>
+
+            {/* Section 2: AI Photo Customization */}
+            <Section icon={PaintBucket} title="2. AI Photo Customization (Image-to-Image)">
+                <CustomPhotosSection />
+            </Section>
+
+            {/* Section 3: AI Image Upscaling */}
+            <Section icon={Zap} title="3. AI Image Upscaling">
+                <UpscalePhotosSection />
+            </Section>
+
+            {/* Section 4: Image Prompt Updater (Supabase Config) */}
+            <Section icon={Tag} title="4. Image Prompt Configuration (Supabase)">
+                <CategoryUpdaterTable />
+            </Section>
         </form>
       </div>
-      {/* Image Modal Integration */}
-      <ImageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} imageUrl={modalImageUrl} />
+      <ImageModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        imageUrl={modalImageUrl} 
+      />
     </div>
   );
 };
 
-// Required export for the Canvas environment
+// Add Plus icon for the new 'Add Row' button
+const Plus = ({ className }) => (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+    </svg>
+);
+
 export default ProductCreatePage;
