@@ -1,5 +1,9 @@
 {
   "rewrites": [
+    {
+      "source": "/api/emails/:id/actions",
+      "destination": "/api/emails/actions?id=:id"
+    },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
