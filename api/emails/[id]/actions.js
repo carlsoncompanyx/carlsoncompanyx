@@ -1,5 +1,7 @@
 import { gmailArchive, gmailDelete, gmailReply, requireApiKeyIfConfigured } from "../../_lib/gmail.js";
 
+const ALLOWED_METHODS = ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+
 async function readJsonBody(req) {
   // Vercel's Node runtime usually parses JSON bodies, but handle raw streams just in case.
   if (req.body && typeof req.body === "object") return req.body;
@@ -16,14 +18,19 @@ async function readJsonBody(req) {
 }
 
 export default async function handler(req, res) {
+  const method = (req.method || "").toUpperCase();
+
   // Preflight
-  if (req.method === "OPTIONS") {
-    res.setHeader("Allow", "POST, OPTIONS");
+  if (method === "OPTIONS") {
+    res.setHeader("Allow", ALLOWED_METHODS.join(", "));
+    res.setHeader("Access-Control-Allow-Methods", ALLOWED_METHODS.join(", "));
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Email-Api-Key");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     return res.status(204).end();
   }
 
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST, OPTIONS");
+  if (!ALLOWED_METHODS.includes(method)) {
+    res.setHeader("Allow", ALLOWED_METHODS.join(", "));
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
@@ -34,7 +41,18 @@ export default async function handler(req, res) {
     if (!id) return res.status(400).json({ error: "Missing email id" });
 
     const body = await readJsonBody(req);
-    const action = body?.action;
+    const actionFromBody = body?.action;
+    const actionFromQuery = Array.isArray(req.query?.action) ? req.query?.action[0] : req.query?.action;
+    const action =
+      actionFromBody ||
+      actionFromQuery ||
+      (method === "DELETE"
+        ? "delete"
+        : method === "PATCH"
+        ? "archive"
+        : method === "PUT" || method === "POST"
+        ? "reply"
+        : undefined);
 
     // Frontend currently sends `replyBody`; previous server code used `replyText`.
     const replyText = (body?.replyBody ?? body?.replyText ?? "").toString();
