@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   Home,
   Mail,
@@ -34,6 +35,15 @@ type ToolItem = {
   url: string;
 };
 
+async function fetchUnreadEmailCount() {
+  const response = await fetch("/api/emails?limit=200");
+  if (!response.ok) throw new Error("Failed to load emails");
+
+  const payload = await response.json();
+  const emails = Array.isArray(payload?.emails) ? payload.emails : [];
+  return emails.filter((email) => !email.is_archived && !email.is_read).length;
+}
+
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -42,10 +52,16 @@ export default function Layout({ children }: LayoutProps) {
   const [signingOut, setSigningOut] = useState(false);
   const { user, signOut } = useAuth();
 
-  // Hardcoded counts to match the design snapshot (no external calls)
-  const unreadEmailCount = 85;
-  const financeNotifications = 1;
-  const toolNotifications = 1;
+  const { data: unreadEmailCount } = useQuery({
+    queryKey: ["emails", "header-unread-count"],
+    queryFn: fetchUnreadEmailCount,
+    refetchOnWindowFocus: false,
+  });
+
+  const hasUnreadEmails = useMemo(
+    () => typeof unreadEmailCount === "number" && unreadEmailCount > 0,
+    [unreadEmailCount],
+  );
 
   const navigationItems: NavigationItem[] = [
     { title: "Home", url: createPageUrl("Home"), icon: Home, badge: null },
@@ -53,7 +69,7 @@ export default function Layout({ children }: LayoutProps) {
       title: "Finances",
       url: createPageUrl("Finances"),
       icon: DollarSign,
-      badge: financeNotifications,
+      badge: null,
     },
     {
       title: "Metrics",
@@ -65,7 +81,7 @@ export default function Layout({ children }: LayoutProps) {
       title: "Emails",
       url: createPageUrl("Emails"),
       icon: Mail,
-      badge: unreadEmailCount,
+      badge: hasUnreadEmails ? unreadEmailCount ?? null : null,
     },
   ];
 
@@ -134,17 +150,12 @@ export default function Layout({ children }: LayoutProps) {
                 >
                   <button
                     onClick={() => setToolsOpen((v) => !v)}
-                    className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  >
-                    <Wrench className="w-4 h-4" />
-                    <span>Tools</span>
-                    <ChevronDown className="w-3 h-3" />
-                    {toolNotifications > 0 && (
-                      <span className="absolute -top-1 -right-2 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] px-2 py-0.5">
-                        {toolNotifications}
-                      </span>
-                    )}
-                  </button>
+                  className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  <Wrench className="w-4 h-4" />
+                  <span>Tools</span>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
 
                   {toolsOpen && (
                     <div className="absolute right-0 mt-2 w-44 bg-white border rounded-md shadow-lg p-2 z-50">
@@ -237,11 +248,6 @@ export default function Layout({ children }: LayoutProps) {
                   <span className="flex items-center gap-3">
                     <Wrench className="w-5 h-5" />
                     Tools
-                    {toolNotifications ? (
-                      <span className="ml-2 inline-flex items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
-                        {toolNotifications}
-                      </span>
-                    ) : null}
                   </span>
                   <ChevronDown
                     className={`w-4 h-4 transition-transform ${

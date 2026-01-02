@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Reply, Trash2, Archive, Send, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function Emails() {
   const [selectedEmail, setSelectedEmail] = useState(null);
@@ -14,6 +16,10 @@ export default function Emails() {
   const [message, setMessage] = useState(null);
   const [emails, setEmails] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const queryClient = useQueryClient();
+
+  const activeEmails = useMemo(() => emails.filter((e) => !e.is_archived), [emails]);
 
   const formatDate = (value, dateFormat) => {
     if (!value) return "Unknown";
@@ -84,14 +90,22 @@ export default function Emails() {
         if (!prev) return null;
         return normalized.find((email) => email.id === prev.id) ?? null;
       });
+      setSelectedIds((prev) => {
+        const next = new Set();
+        normalized.forEach((email) => {
+          if (prev.has(email.id)) next.add(email.id);
+        });
+        return next;
+      });
       setMessage((prev) => (prev?.type === "error" ? null : prev));
+      queryClient.invalidateQueries({ queryKey: ["emails", "header-unread-count"] });
     } catch (error) {
       console.error("Failed to load emails:", error);
       setMessage({ type: "error", text: error.message || "Failed to load emails." });
     } finally {
       setIsFetching(false);
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     fetchEmails();
@@ -133,6 +147,31 @@ export default function Emails() {
     return payload;
   };
 
+  const anySelected = useMemo(() => selectedIds.size > 0, [selectedIds]);
+  const allActiveSelected = useMemo(
+    () => selectedIds.size > 0 && activeEmails.every((email) => selectedIds.has(email.id)),
+    [activeEmails, selectedIds],
+  );
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = (checked) => {
+    setSelectedIds(() => {
+      if (checked) return new Set(activeEmails.map((email) => email.id));
+      return new Set();
+    });
+  };
+
   const handleSelectEmail = (email) => {
     const nextSelected = email.is_read ? email : { ...email, is_read: true };
     setSelectedEmail(nextSelected);
@@ -150,7 +189,13 @@ export default function Emails() {
       const result = await sendActionToN8n(email, "archive");
       setEmails((prev) => prev.map((e) => (e.id === email.id ? { ...e, is_archived: true } : e)));
       setSelectedEmail(null);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(email.id);
+        return next;
+      });
       setMessage({ type: "success", text: result?.message || "Email archived successfully" });
+      queryClient.invalidateQueries({ queryKey: ["emails", "header-unread-count"] });
     } catch (error) {
       console.error("Failed to archive:", error);
       setMessage({ type: "error", text: `Failed to archive email: ${error.message}.` });
@@ -166,10 +211,47 @@ export default function Emails() {
       const result = await sendActionToN8n(email, "delete");
       setEmails((prev) => prev.filter((e) => e.id !== email.id));
       setSelectedEmail(null);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(email.id);
+        return next;
+      });
       setMessage({ type: "success", text: result?.message || "Email deleted" });
+      queryClient.invalidateQueries({ queryKey: ["emails", "header-unread-count"] });
     } catch (error) {
       console.error("Failed to delete:", error);
       setMessage({ type: "error", text: `Failed to delete email: ${error.message}.` });
+    }
+  };
+
+  const handleBulkAction = async (action) => {
+    const targets = emails.filter((email) => selectedIds.has(email.id) && !email.is_archived);
+    if (!targets.length) return;
+
+    if (action === "delete" && !window.confirm(`Delete ${targets.length} email(s)?`)) {
+      return;
+    }
+
+    try {
+      for (const email of targets) {
+        // eslint-disable-next-line no-await-in-loop
+        await sendActionToN8n(email, action);
+      }
+
+      if (action === "archive") {
+        setEmails((prev) => prev.map((email) => (selectedIds.has(email.id) ? { ...email, is_archived: true } : email)));
+        setSelectedEmail(null);
+      } else if (action === "delete") {
+        setEmails((prev) => prev.filter((email) => !selectedIds.has(email.id)));
+        setSelectedEmail(null);
+      }
+
+      setSelectedIds(new Set());
+      setMessage({ type: "success", text: `Successfully ${action === "archive" ? "archived" : "deleted"} ${targets.length} email(s).` });
+      queryClient.invalidateQueries({ queryKey: ["emails", "header-unread-count"] });
+    } catch (error) {
+      console.error(`Failed to ${action}:`, error);
+      setMessage({ type: "error", text: `Failed to ${action} selected emails: ${error.message}.` });
     }
   };
 
@@ -193,8 +275,6 @@ export default function Emails() {
     }
   };
 
-  const activeEmails = emails.filter((e) => !e.is_archived);
-
   return (
     <div className="space-y-8">
       <div>
@@ -214,8 +294,12 @@ export default function Emails() {
         <div className="lg:col-span-2">
           <Card className="shadow-xl border-0 overflow-hidden">
             <CardHeader className="border-b border-slate-100">
-              <div className="flex items-center justify-between">
-                <CardTitle>Inbox ({activeEmails.length})</CardTitle>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <Checkbox checked={allActiveSelected} onCheckedChange={handleSelectAll} />
+                  <CardTitle>Inbox ({activeEmails.length})</CardTitle>
+                  {anySelected ? <span className="text-xs text-slate-500">{selectedIds.size} selected</span> : null}
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -229,6 +313,35 @@ export default function Emails() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!anySelected}
+                    onClick={() => handleBulkAction("archive")}
+                    className="gap-2"
+                  >
+                    <Archive className="w-4 h-4" />
+                    Archive selected
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!anySelected}
+                    onClick={() => handleBulkAction("delete")}
+                    className="gap-2 text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete selected
+                  </Button>
+                </div>
+                {anySelected ? (
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                    Clear selection
+                  </Button>
+                ) : null}
+              </div>
               <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
                 {isFetching && activeEmails.length === 0 ? (
                   <div className="text-center py-12 text-slate-500">
@@ -240,19 +353,25 @@ export default function Emails() {
                   </div>
                 ) : (
                   activeEmails.map((email) => (
-                    <div
-                      key={email.id}
-                      onClick={() => handleSelectEmail(email)}
-                      className={`p-4 cursor-pointer transition-all hover:bg-slate-50 ${
-                        selectedEmail?.id === email.id ? "bg-blue-50" : ""
-                      } ${!email.is_read ? "bg-blue-50/30" : ""}`}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className={`text-slate-900 truncate ${!email.is_read ? "font-bold" : "font-medium"}`}>
-                          {email.from_name || email.from_email || "Unknown sender"}
-                        </p>
-                        <span className="text-xs text-slate-500 whitespace-nowrap">
-                          {formatDate(email.received_date, "MMM d")}
+                  <div
+                    key={email.id}
+                    onClick={() => handleSelectEmail(email)}
+                    className={`p-4 cursor-pointer transition-all hover:bg-slate-50 ${
+                      selectedEmail?.id === email.id ? "bg-blue-50" : ""
+                    } ${!email.is_read ? "bg-blue-50/30" : ""}`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="pt-1 flex items-start"
+                      >
+                        <Checkbox checked={selectedIds.has(email.id)} onCheckedChange={() => toggleSelect(email.id)} />
+                      </div>
+                      <p className={`text-slate-900 truncate ${!email.is_read ? "font-bold" : "font-medium"}`}>
+                        {email.from_name || email.from_email || "Unknown sender"}
+                      </p>
+                      <span className="text-xs text-slate-500 whitespace-nowrap">
+                        {formatDate(email.received_date, "MMM d")}
                         </span>
                       </div>
                       <p className={`text-sm truncate mb-1 ${!email.is_read ? "font-semibold text-slate-900" : "text-slate-700"}`}>
