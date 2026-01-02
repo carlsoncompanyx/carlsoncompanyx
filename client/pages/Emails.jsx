@@ -275,8 +275,6 @@ export default function Emails() {
     }
   };
 
-  const activeEmails = emails.filter((e) => !e.is_archived);
-
   return (
     <div className="space-y-8">
       <div>
