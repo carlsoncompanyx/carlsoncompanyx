@@ -98,12 +98,13 @@ export default function Emails() {
   }, [fetchEmails]);
 
   const sendActionToN8n = async (email, action, replyBody = null) => {
-    const response = await fetch(`/api/emails/${encodeURIComponent(email.id)}/actions`, {
+    const response = await fetch(`/api/emails/actions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        id: email.id,
         action,
         ...(action === "reply" && replyBody ? { replyBody } : {}),
         email,
