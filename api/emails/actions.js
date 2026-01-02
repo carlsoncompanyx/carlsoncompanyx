@@ -1,9 +1,12 @@
-import { gmailArchive, gmailDelete, gmailReply, requireApiKeyIfConfigured } from "../../_lib/gmail.js";
+import { gmailArchive, gmailDelete, gmailReply, requireApiKeyIfConfigured } from "../_lib/gmail.js";
 
 const ALLOWED_METHODS = ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, X-Email-Api-Key",
+};
 
 async function readJsonBody(req) {
-  // Vercel's Node runtime usually parses JSON bodies, but handle raw streams just in case.
   if (req.body && typeof req.body === "object") return req.body;
 
   const chunks = [];
@@ -17,15 +20,17 @@ async function readJsonBody(req) {
   }
 }
 
+function setCorsHeaders(res) {
+  Object.entries(CORS_HEADERS).forEach(([key, value]) => res.setHeader(key, value));
+}
+
 export default async function handler(req, res) {
   const method = (req.method || "").toUpperCase();
 
-  // Preflight
   if (method === "OPTIONS") {
+    setCorsHeaders(res);
     res.setHeader("Allow", ALLOWED_METHODS.join(", "));
     res.setHeader("Access-Control-Allow-Methods", ALLOWED_METHODS.join(", "));
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Email-Api-Key");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     return res.status(204).end();
   }
 
@@ -37,12 +42,10 @@ export default async function handler(req, res) {
   try {
     requireApiKeyIfConfigured(req);
 
-    const id = Array.isArray(req.query?.id) ? req.query.id[0] : req.query?.id;
-    if (!id) return res.status(400).json({ error: "Missing email id" });
-
+    const queryId = Array.isArray(req.query?.id) ? req.query.id[0] : req.query?.id;
     const body = await readJsonBody(req);
     const actionFromBody = body?.action;
-    const actionFromQuery = Array.isArray(req.query?.action) ? req.query?.action[0] : req.query?.action;
+    const actionFromQuery = Array.isArray(req.query?.action) ? req.query.action[0] : req.query?.action;
     const action =
       actionFromBody ||
       actionFromQuery ||
@@ -54,8 +57,12 @@ export default async function handler(req, res) {
         ? "reply"
         : undefined);
 
-    // Frontend currently sends `replyBody`; previous server code used `replyText`.
+    const id = body?.id || body?.email?.id || queryId;
+    if (!id) return res.status(400).json({ error: "Missing email id" });
+
     const replyText = (body?.replyBody ?? body?.replyText ?? "").toString();
+
+    setCorsHeaders(res);
 
     switch (action) {
       case "archive":
@@ -78,6 +85,7 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error("Email action failed:", err);
+    setCorsHeaders(res);
     return res.status(500).json({ error: "Action failed" });
   }
 }
