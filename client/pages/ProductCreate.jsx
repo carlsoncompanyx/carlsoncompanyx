@@ -7,7 +7,7 @@ import { Image, Tag, DollarSign, Save, ArrowLeft, Loader2, Info, ListChecks, X, 
 const apiConfig = {
   // # SUPABASE CONFIGURATION
   // 1. YOUR SUPABASE REST URL (e.g., https://[project_ref].supabase.co)
-  supabase_api_url: "YOUR_SUPABASE_REST_URL_HERE",
+  supabase_api_url: "https://ckqphrogexyzhwifuksr.supabase.co",
   // 2. YOUR SUPABASE ANON PUBLIC KEY
   supabase_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrcXBocm9nZXh5emh3aWZ1a3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NjIyNjcsImV4cCI6MjA3NjUzODI2N30.L3rWgtCxc3aec1zCLe_TZfep2PdJ_8i9Dhp_ob0Kldw",
   // 3. SUPABASE TABLE NAME FOR CATEGORY PROMPTS
