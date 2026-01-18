@@ -7,9 +7,11 @@ import { Image, Tag, DollarSign, Save, ArrowLeft, Loader2, Info, ListChecks, X, 
 const apiConfig = {
   // # SUPABASE CONFIGURATION
   // 1. YOUR SUPABASE REST URL (e.g., https://[project_ref].supabase.co)
-  supabase_api_url: "YOUR_SUPABASE_REST_URL_HERE",
+  supabase_api_url: "https://ckqphrogexyzhwifuksr.supabase.co",
   // 2. YOUR SUPABASE ANON PUBLIC KEY
   supabase_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrcXBocm9nZXh5emh3aWZ1a3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NjIyNjcsImV4cCI6MjA3NjUzODI2N30.L3rWgtCxc3aec1zCLe_TZfep2PdJ_8i9Dhp_ob0Kldw",
+  // 3. SUPABASE TABLE NAME FOR CATEGORY PROMPTS
+  supabase_categories_table: "promptdatabase",
   // Note: Your ID 30767 can be used here if it's part of a flow key or project ID:
   supabase_project_id: "30767", 
   
@@ -50,12 +52,11 @@ const initialProductState = {
   images: [], 
 };
 
-// MOCK DATA for Image Prompts: Topics & Styles (Used as fallback/initial state)
-// NOTE: I am updating this mock data to use 'topic' and 'styleSplit' to match the request.
+// MOCK DATA for Image Prompts (Used as fallback/initial state)
 const mockCategoryData = [
-  { id: 1, topic: 'Engagement Ring Box', styleSplit: '50% Elegant, 50% Minimal' },
-  { id: 2, topic: 'Bohemian Wall Hanging', styleSplit: '70% Macrame, 30% Geometric' },
-  { id: 3, topic: 'Abstract Birthday Card', styleSplit: '90% Watercolor, 10% Line Art' },
+  { id: 1, prompt: 'Elegant velvet ring box on marble', score: 98, style: 'Minimal', topic: 'Engagement Ring Box', aspect_ratio: '3:2' },
+  { id: 2, prompt: 'Handwoven macrame wall hanging', score: 92, style: 'Bohemian', topic: 'Wall Decor', aspect_ratio: '4:5' },
+  { id: 3, prompt: 'Watercolor birthday card with flowers', score: 88, style: 'Watercolor', topic: 'Greeting Cards', aspect_ratio: '5:7' },
 ];
 
 // --- Helper Functions for API Calls ---
@@ -138,18 +139,18 @@ const ProductCreatePage = () => {
       setCategoryError('');
       
       // Check for config presence
-      if (apiConfig.supabase_api_url === "https://ckqphrogexyzhwifuksr.supabase.co/rest/v1/etsytopics?select=topic") {
+      if (apiConfig.supabase_api_url === "YOUR_SUPABASE_REST_URL_HERE") {
           setCategoryError("Please configure 'supabase_api_url' and 'supabase_anon_key' in apiConfig. Using mock data.");
           setImageCategories(mockCategoryData);
           setIsCategoryLoading(false);
           return;
       }
       
-      const SUPABASE_TABLE_NAME = 'etsytopics'; // Assuming this is your table name
+      const SUPABASE_TABLE_NAME = apiConfig.supabase_categories_table;
 
       try {
           // # Fetch categories from your Supabase table
-          const response = await fetch(`https://ckqphrogexyzhwifuksr.supabase.co/rest/v1/etsytopics?select=*`, {
+          const response = await fetch(`${apiConfig.supabase_api_url}/rest/v1/${SUPABASE_TABLE_NAME}?select=*`, {
               headers: {
                   'apikey': apiConfig.supabase_anon_key,
                   'Authorization': `Bearer ${apiConfig.supabase_anon_key}`,
@@ -166,11 +167,14 @@ const ProductCreatePage = () => {
           }
 
           const data = await response.json();
-          // Map data to ensure it has 'topic' and 'styleSplit'
+          // Map data to ensure it has the expected fields
           const processedData = data.map(item => ({
             id: item.id,
+            prompt: item.prompt || '',
+            score: item.score ?? '',
+            style: item.style || '',
             topic: item.topic || '',
-            styleSplit: item.style_split || '',
+            aspect_ratio: item.aspect_ratio || '',
           }));
           
           setImageCategories(processedData.length > 0 ? processedData : mockCategoryData);
@@ -297,10 +301,12 @@ const ProductCreatePage = () => {
     }));
   };
   
-  const handleImageClick = (url) => {
+  const openImagePreview = (url) => {
     setModalImageUrl(url);
     setIsModalOpen(true);
   };
+
+  const isPlaceholderImage = (url, markers) => markers.some((marker) => url.includes(marker));
 
   const handleProductTypeChange = (type) => {
     setProductTypes(prev =>
@@ -334,7 +340,7 @@ const ProductCreatePage = () => {
 
     setIsCategoryUpdating(true);
     setCategoryError('');
-    const SUPABASE_TABLE_NAME = 'image_prompts'; 
+    const SUPABASE_TABLE_NAME = apiConfig.supabase_categories_table; 
     
     try {
         // We use POST/upsert to update existing records or insert new ones.
@@ -346,8 +352,17 @@ const ProductCreatePage = () => {
                 'Content-Type': 'application/json',
                 'Prefer': 'resolution=merge-duplicates' // Use upsert/merge
             },
-            // Ensure the data being sent matches the table schema (topic, styleSplit, id are present)
-            body: JSON.stringify(imageCategories.map(({ topic, styleSplit, id }) => ({ topic, styleSplit, id })))
+            // Ensure the data being sent matches the table schema
+            body: JSON.stringify(
+                imageCategories.map(({ prompt, score, style, topic, aspect_ratio, id }) => ({
+                    prompt,
+                    score,
+                    style,
+                    topic,
+                    aspect_ratio,
+                    id,
+                }))
+            )
         });
 
         if (!response.ok) {
@@ -442,7 +457,7 @@ const ProductCreatePage = () => {
                                 <td className="px-4 py-2">
                                     <div 
                                         className="w-16 h-16 rounded-lg overflow-hidden cursor-pointer shadow-md border border-gray-200 hover:border-indigo-500 transition duration-150"
-                                        onClick={() => handleImageClick(img.url)}
+                                        onClick={() => openImagePreview(img.url)}
                                     >
                                         <img
                                             src={img.url}
@@ -708,6 +723,15 @@ const ProductCreatePage = () => {
                             )}
                         </div>
                     </label>
+                    {!isPlaceholderImage(originalPhotoUrl, ['Upload+Original+Photo']) && (
+                        <button
+                            type="button"
+                            onClick={() => openImagePreview(originalPhotoUrl)}
+                            className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                        >
+                            Preview image
+                        </button>
+                    )}
                 </div>
                 
                 {/* Modified Photo Box */}
@@ -725,6 +749,15 @@ const ProductCreatePage = () => {
                             <img src={modifiedPhotoUrl} alt="Modified" className="w-full h-full object-cover"/>
                         )}
                     </div>
+                    {!isPlaceholderImage(modifiedPhotoUrl, ['A.I.+Output', 'AI+ERROR']) && (
+                        <button
+                            type="button"
+                            onClick={() => openImagePreview(modifiedPhotoUrl)}
+                            className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                        >
+                            Preview image
+                        </button>
+                    )}
                 </div>
             </div>
             
@@ -857,6 +890,15 @@ const ProductCreatePage = () => {
                             )}
                         </div>
                     </label>
+                    {!isPlaceholderImage(upscaleOriginalUrl, ['Low+Res+Input']) && (
+                        <button
+                            type="button"
+                            onClick={() => openImagePreview(upscaleOriginalUrl)}
+                            className="mt-3 text-sm font-medium text-red-600 hover:text-red-700"
+                        >
+                            Preview image
+                        </button>
+                    )}
                 </div>
                 
                 {/* Upscaled Photo Box */}
@@ -872,6 +914,15 @@ const ProductCreatePage = () => {
                             <img src={upscaleModifiedUrl} alt="Upscaled High Res" className="w-full h-full object-cover"/>
                         )}
                     </div>
+                    {!isPlaceholderImage(upscaleModifiedUrl, ['A.I.+Output', 'AI+ERROR']) && (
+                        <button
+                            type="button"
+                            onClick={() => openImagePreview(upscaleModifiedUrl)}
+                            className="mt-3 text-sm font-medium text-red-600 hover:text-red-700"
+                        >
+                            Preview image
+                        </button>
+                    )}
                 </div>
             </div>
             
@@ -931,11 +982,20 @@ const ProductCreatePage = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="w-1/2 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="w-1/3 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Prompt
+              </th>
+              <th className="w-24 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
+                Score
+              </th>
+              <th className="w-40 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
+                Style
+              </th>
+              <th className="w-40 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
                 Topic
               </th>
-              <th className="w-1/2 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
-                Style Split
+              <th className="w-32 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
+                Aspect Ratio
               </th>
             </tr>
           </thead>
@@ -945,18 +1005,48 @@ const ProductCreatePage = () => {
                 <td className="px-4 py-1">
                   <input
                     type="text"
-                    value={item.topic}
-                    onChange={(e) => handleCategoryChange(index, 'topic', e.target.value)}
-                    placeholder="Topic Name"
+                    value={item.prompt}
+                    onChange={(e) => handleCategoryChange(index, 'prompt', e.target.value)}
+                    placeholder="Prompt"
+                    className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
+                  />
+                </td>
+                <td className="px-4 py-1 border-l border-gray-100">
+                  <input
+                    type="number"
+                    value={item.score}
+                    onChange={(e) => {
+                      const { value } = e.target;
+                      handleCategoryChange(index, 'score', value === '' ? '' : Number(value));
+                    }}
+                    placeholder="0"
                     className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
                   />
                 </td>
                 <td className="px-4 py-1 border-l border-gray-100">
                   <input
                     type="text"
-                    value={item.styleSplit}
-                    onChange={(e) => handleCategoryChange(index, 'styleSplit', e.target.value)}
-                    placeholder="Style Split (e.g., 70% Watercolor)"
+                    value={item.style}
+                    onChange={(e) => handleCategoryChange(index, 'style', e.target.value)}
+                    placeholder="Style"
+                    className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
+                  />
+                </td>
+                <td className="px-4 py-1 border-l border-gray-100">
+                  <input
+                    type="text"
+                    value={item.topic}
+                    onChange={(e) => handleCategoryChange(index, 'topic', e.target.value)}
+                    placeholder="Topic"
+                    className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
+                  />
+                </td>
+                <td className="px-4 py-1 border-l border-gray-100">
+                  <input
+                    type="text"
+                    value={item.aspect_ratio}
+                    onChange={(e) => handleCategoryChange(index, 'aspect_ratio', e.target.value)}
+                    placeholder="Aspect Ratio"
                     className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
                   />
                 </td>
@@ -968,7 +1058,7 @@ const ProductCreatePage = () => {
         <div className="p-3 bg-gray-50 flex justify-end border-t border-gray-200">
           {/* Button to add a new row locally for a new configuration */}
           <button
-            onClick={() => setImageCategories(prev => [...prev, { topic: '', styleSplit: '', id: crypto.randomUUID() }])}
+            onClick={() => setImageCategories(prev => [...prev, { prompt: '', score: 0, style: '', topic: '', aspect_ratio: '', id: crypto.randomUUID() }])}
             type="button"
             className="px-4 py-1.5 bg-gray-400 text-white text-sm font-semibold rounded-full hover:bg-gray-500 transition duration-150 shadow-md flex items-center mr-3"
           >
