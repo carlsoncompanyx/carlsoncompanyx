@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Image, Tag, DollarSign, Save, ArrowLeft, Loader2, Info, ListChecks, X, PaintBucket, ImagePlus, CloudUpload, Zap, Send } from 'lucide-react';
+import { Image, DollarSign, Save, ArrowLeft, Loader2, Info, ListChecks, X, PaintBucket, ImagePlus, CloudUpload, Zap, Send } from 'lucide-react';
 
 // =================================================================================
 // # API & CONFIGURATION BLOCK: DO NOT EDIT THE KEYS IN THIS BLOCK IF YOU HAVE ALREADY CONFIGURED THEM
@@ -10,6 +10,10 @@ const apiConfig = {
   supabase_api_url: "YOUR_SUPABASE_REST_URL_HERE",
   // 2. YOUR SUPABASE ANON PUBLIC KEY
   supabase_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrcXBocm9nZXh5emh3aWZ1a3NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NjIyNjcsImV4cCI6MjA3NjUzODI2N30.L3rWgtCxc3aec1zCLe_TZfep2PdJ_8i9Dhp_ob0Kldw",
+  // 3. SUPABASE TABLE NAME FOR CATEGORY PROMPTS
+  supabase_categories_table: "promptdatabase",
+  // 4. IMAGE PREVIEW BASE URL (e.g., https://bridge.carlsoncompany.cc/)
+  image_preview_base_url: "https://bridge.carlsoncompany.cc/",
   // Note: Your ID 30767 can be used here if it's part of a flow key or project ID:
   supabase_project_id: "30767", 
   
@@ -50,12 +54,11 @@ const initialProductState = {
   images: [], 
 };
 
-// MOCK DATA for Image Prompts: Topics & Styles (Used as fallback/initial state)
-// NOTE: I am updating this mock data to use 'topic' and 'styleSplit' to match the request.
-const mockCategoryData = [
-  { id: 1, topic: 'Engagement Ring Box', styleSplit: '50% Elegant, 50% Minimal' },
-  { id: 2, topic: 'Bohemian Wall Hanging', styleSplit: '70% Macrame, 30% Geometric' },
-  { id: 3, topic: 'Abstract Birthday Card', styleSplit: '90% Watercolor, 10% Line Art' },
+// MOCK DATA for Image Prompts (Used as fallback/initial state)
+const mockPromptData = [
+  { id: 1, image_file_name: 'ring_box_01.jpg', style: 'Minimal', aspect_ratio: '3:2', score: 98 },
+  { id: 2, image_file_name: 'wall_hanging_02.jpg', style: 'Bohemian', aspect_ratio: '4:5', score: 92 },
+  { id: 3, image_file_name: 'birthday_card_03.jpg', style: 'Watercolor', aspect_ratio: '5:7', score: 88 },
 ];
 
 // --- Helper Functions for API Calls ---
@@ -100,8 +103,6 @@ const ProductCreatePage = () => {
   const [product, setProduct] = useState(initialProductState);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState('');
-  const [isImageLoading, setIsImageLoading] = useState(true);
-
   // Listing Configuration State
   const [aspectRatio, setAspectRatio] = useState('3:2');
   const [productTypes, setProductTypes] = useState([]); 
@@ -118,11 +119,8 @@ const ProductCreatePage = () => {
   const [selectedUpscaleModel, setSelectedUpscaleModel] = useState('Standard');
   const [upscaleOriginalFile, setUpscaleOriginalFile] = useState(null); 
 
-  // Category Updater Table State (Data fetched from Supabase)
-  const [imageCategories, setImageCategories] = useState([]);
-  const [isCategoryLoading, setIsCategoryLoading] = useState(true);
-  const [isCategoryUpdating, setIsCategoryUpdating] = useState(false);
-  const [categoryError, setCategoryError] = useState('');
+  // Prompt Table State (Data fetched from Supabase)
+  const [isPromptLoading, setIsPromptLoading] = useState(true);
     
   // Image Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -131,125 +129,112 @@ const ProductCreatePage = () => {
 
   // --- Supabase and Initial Image Load on Component Mount ---
   
-  // Function to fetch categories from Supabase (Used in useEffect and refresh)
-  const fetchCategories = async () => {
-      // # 1. SUPABASE INTEGRATION BLOCK: Load Image Categories (Topics & Styles)
-      setIsCategoryLoading(true);
-      setCategoryError('');
-      
+  // Function to fetch prompt rows from Supabase (Used in useEffect and refresh)
+  const fetchPromptRows = async () => {
+      // # 1. SUPABASE INTEGRATION BLOCK: Load prompt rows for table
+      setIsPromptLoading(true);
+
       // Check for config presence
-      if (apiConfig.supabase_api_url === "https://ckqphrogexyzhwifuksr.supabase.co/rest/v1/etsytopics?select=topic") {
-          setCategoryError("Please configure 'supabase_api_url' and 'supabase_anon_key' in apiConfig. Using mock data.");
-          setImageCategories(mockCategoryData);
-          setIsCategoryLoading(false);
+      if (apiConfig.supabase_api_url === "YOUR_SUPABASE_REST_URL_HERE") {
+          setFormError("Please configure 'supabase_api_url' and 'supabase_anon_key' in apiConfig. Using mock data.");
+          const sortedMock = [...mockPromptData].sort((a, b) => b.score - a.score);
+          const previewBaseUrl = apiConfig.image_preview_base_url?.replace(/\/$/, '') || '';
+          setProduct(prev => ({
+            ...prev,
+            images: sortedMock.map(item => ({
+              id: item.id,
+              url: previewBaseUrl ? `${previewBaseUrl}/${item.image_file_name}` : '',
+              filename: item.image_file_name || '',
+              style: item.style || '',
+              aspectRatio: item.aspect_ratio || '',
+              score: item.score ?? 0,
+              selected: false,
+            })),
+          }));
+          setIsPromptLoading(false);
           return;
       }
-      
-      const SUPABASE_TABLE_NAME = 'etsytopics'; // Assuming this is your table name
+
+      const SUPABASE_TABLE_NAME = apiConfig.supabase_categories_table;
 
       try {
-          // # Fetch categories from your Supabase table
-          const response = await fetch(`https://ckqphrogexyzhwifuksr.supabase.co/rest/v1/etsytopics?select=*`, {
+          // # Fetch prompt rows from your Supabase table
+          const response = await fetch(
+            `${apiConfig.supabase_api_url}/rest/v1/${SUPABASE_TABLE_NAME}?select=id,image_file_name,style,aspect_ratio,score`,
+            {
               headers: {
-                  'apikey': apiConfig.supabase_anon_key,
-                  'Authorization': `Bearer ${apiConfig.supabase_anon_key}`,
+                'apikey': apiConfig.supabase_anon_key,
+                'Authorization': `Bearer ${apiConfig.supabase_anon_key}`,
               },
-          });
+            }
+          );
 
           if (!response.ok) {
               const errorData = await response.json().catch(() => ({ message: 'Could not parse error response.' }));
               const errorMessage = `Supabase fetch failed (Status: ${response.status}). Message: ${errorData.message || 'Unknown error'}`;
               console.error(errorMessage);
-              setCategoryError(errorMessage + '. Using mock data.');
-              setImageCategories(mockCategoryData);
+              setFormError(errorMessage + '. Using mock data.');
+              const sortedMock = [...mockPromptData].sort((a, b) => b.score - a.score);
+              const previewBaseUrl = apiConfig.image_preview_base_url?.replace(/\/$/, '') || '';
+              setProduct(prev => ({
+                ...prev,
+                images: sortedMock.map(item => ({
+                  id: item.id,
+                  url: previewBaseUrl ? `${previewBaseUrl}/${item.image_file_name}` : '',
+                  filename: item.image_file_name || '',
+                  style: item.style || '',
+                  aspectRatio: item.aspect_ratio || '',
+                  score: item.score ?? 0,
+                  selected: false,
+                })),
+              }));
               return;
           }
 
           const data = await response.json();
-          // Map data to ensure it has 'topic' and 'styleSplit'
-          const processedData = data.map(item => ({
-            id: item.id,
-            topic: item.topic || '',
-            styleSplit: item.style_split || '',
-          }));
-          
-          setImageCategories(processedData.length > 0 ? processedData : mockCategoryData);
+          const sortedData = [...data].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
+          const previewBaseUrl = apiConfig.image_preview_base_url?.replace(/\/$/, '') || '';
+          setProduct(prev => ({
+            ...prev,
+            images: sortedData.map(item => ({
+              id: item.id ?? crypto.randomUUID(),
+              url: previewBaseUrl ? `${previewBaseUrl}/${item.image_file_name}` : '',
+              filename: item.image_file_name || '',
+              style: item.style || '',
+              aspectRatio: item.aspect_ratio || '',
+              score: item.score ?? 0,
+              selected: false,
+            })),
+          }));
       } catch (err) {
           // Catch network errors (e.g., CORS, no connection)
-          const errorMessage = `Failed to load categories due to network error: ${err.message}.`;
+          const errorMessage = `Failed to load prompts due to network error: ${err.message}.`;
           console.error(errorMessage, err);
-          setCategoryError(errorMessage + ' Using mock data.');
-          setImageCategories(mockCategoryData);
+          setFormError(errorMessage + ' Using mock data.');
+          const sortedMock = [...mockPromptData].sort((a, b) => b.score - a.score);
+          const previewBaseUrl = apiConfig.image_preview_base_url?.replace(/\/$/, '') || '';
+          setProduct(prev => ({
+            ...prev,
+            images: sortedMock.map(item => ({
+              id: item.id,
+              url: previewBaseUrl ? `${previewBaseUrl}/${item.image_file_name}` : '',
+              filename: item.image_file_name || '',
+              style: item.style || '',
+              aspectRatio: item.aspect_ratio || '',
+              score: item.score ?? 0,
+              selected: false,
+            })),
+          }));
       } finally {
-          setIsCategoryLoading(false);
+          setIsPromptLoading(false);
       }
   };
 
 
   useEffect(() => {
     
-    fetchCategories();
-    
-    // # 2. N8N INTEGRATION BLOCK: Initial Image Fetch (Simulating I:\Images-Initial)
-    const triggerInitialImageFetchFlow = async () => {
-        setIsImageLoading(true);
-        
-        // Prevent triggering if webhook is not configured
-        if (apiConfig.n8n_initial_fetch_webhook === "YOUR_N8N_WEBHOOK_FOR_INITIAL_IMAGE_FETCH") {
-            setFormError("Please configure 'n8n_initial_fetch_webhook' in apiConfig. Using mock images.");
-            const mockFallback = [
-                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/4f46e5/ffffff?text=A_98", filename: 'mug_vintage_01.jpg', style: 'Vintage', score: 98, selected: false },
-                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/6366f1/ffffff?text=B_95", filename: 'mug_bohemian_02.jpg', style: 'Bohemian', score: 95, selected: false },
-                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/818cf8/ffffff?text=C_92", filename: 'mug_geometric_03.jpg', style: 'Geometric', score: 92, selected: false },
-            ];
-            setProduct(prev => ({ ...prev, images: mockFallback }));
-            setIsImageLoading(false);
-            return;
-        }
-        
-        console.log("Triggering n8n flow to fetch images from local PC and return URLs...");
-
-        try {
-            const response = await fetch(apiConfig.n8n_initial_fetch_webhook, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiConfig.flow_auth_token}`
-                },
-                // You can send contextual data to n8n if needed
-                body: JSON.stringify({ userId: 'current_user_id', projectId: apiConfig.supabase_project_id }) 
-            });
-            
-            const result = await response.json();
-            if (!response.ok || !Array.isArray(result.images)) {
-                // Assuming n8n returns an object like { success: true, images: [...] }
-                const message = result.message || `n8n did not return a valid image array (Status: ${response.status}).`;
-                console.error(message);
-                throw new Error(message);
-            }
-
-            const sortedImages = result.images.sort((a, b) => b.score - a.score);
-            setProduct(prev => ({ ...prev, images: sortedImages }));
-
-        } catch (error) {
-            console.error('Error triggering initial n8n fetch flow:', error.message);
-            // MOCK DATA FALLBACK (if n8n fails)
-            setFormError(`Initial image fetch failed: ${error.message}. Using mock image data.`);
-            
-            // Generate mock data structured as if it came from n8n
-            const mockFallback = [
-                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/4f46e5/ffffff?text=A_98", filename: 'mug_vintage_01.jpg', style: 'Vintage', score: 98, selected: false },
-                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/6366f1/ffffff?text=B_95", filename: 'mug_bohemian_02.jpg', style: 'Bohemian', score: 95, selected: false },
-                { id: crypto.randomUUID(), url: "https://placehold.co/150x150/818cf8/ffffff?text=C_92", filename: 'mug_geometric_03.jpg', style: 'Geometric', score: 92, selected: false },
-            ];
-            setProduct(prev => ({ ...prev, images: mockFallback }));
-        } finally {
-            setIsImageLoading(false);
-        }
-    };
-
-    triggerInitialImageFetchFlow(); 
+    fetchPromptRows();
   }, []);
   // -----------------------------------------------------------
 
@@ -297,10 +282,12 @@ const ProductCreatePage = () => {
     }));
   };
   
-  const handleImageClick = (url) => {
+  const openImagePreview = (url) => {
     setModalImageUrl(url);
     setIsModalOpen(true);
   };
+
+  const isPlaceholderImage = (url, markers) => markers.some((marker) => url.includes(marker));
 
   const handleProductTypeChange = (type) => {
     setProductTypes(prev =>
@@ -309,66 +296,6 @@ const ProductCreatePage = () => {
         : [...prev, type]
     );
   };
-  
-  // --- Category Handlers (Supabase Update) ---
-  
-  const handleCategoryChange = (index, fieldName, value) => {
-    setImageCategories(prev =>
-      prev.map((item, i) => {
-        if (i === index) {
-          return { ...item, [fieldName]: value };
-        }
-        return item;
-      })
-    );
-  };
-
-  const handleCategoryUpdate = async () => {
-    // # 3. SUPABASE INTEGRATION BLOCK: Update Image Categories
-    
-    // Prevent updating if API URL is not configured
-    if (apiConfig.supabase_api_url === "YOUR_SUPABASE_REST_URL_HERE") {
-        setCategoryError("Please configure 'supabase_api_url' and 'supabase_anon_key' in apiConfig before updating.");
-        return;
-    }
-
-    setIsCategoryUpdating(true);
-    setCategoryError('');
-    const SUPABASE_TABLE_NAME = 'image_prompts'; 
-    
-    try {
-        // We use POST/upsert to update existing records or insert new ones.
-        const response = await fetch(`${apiConfig.supabase_api_url}/rest/v1/${SUPABASE_TABLE_NAME}`, {
-            method: 'POST',
-            headers: {
-                'apikey': apiConfig.supabase_anon_key,
-                'Authorization': `Bearer ${apiConfig.supabase_anon_key}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'resolution=merge-duplicates' // Use upsert/merge
-            },
-            // Ensure the data being sent matches the table schema (topic, styleSplit, id are present)
-            body: JSON.stringify(imageCategories.map(({ topic, styleSplit, id }) => ({ topic, styleSplit, id })))
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Could not parse error response.' }));
-            throw new Error(errorData.message || `Supabase update failed (Status: ${response.status}).`);
-        }
-
-        console.log('Categories successfully updated in Supabase.');
-        setCategoryError('Successfully saved changes to Supabase! Refreshing data...');
-        // Refetch data after successful update to ensure state matches DB
-        await fetchCategories();
-        setCategoryError('Successfully saved changes to Supabase!');
-        
-    } catch (err) {
-        setCategoryError(`Failed to update categories in Supabase: ${err.message}`);
-        console.error(err);
-    } finally {
-        setIsCategoryUpdating(false);
-    }
-  };
-  // ---------------------------------------------
 
   const Section = ({ icon: Icon, title, children, isSmall = false }) => (
     <div className={`bg-white p-6 rounded-xl shadow-lg border border-gray-100 ${isSmall ? 'mb-4' : 'mb-8'}`}>
@@ -384,11 +311,11 @@ const ProductCreatePage = () => {
 
   // --- Image Table Component (Fixed height, sticky header) ---
   const ImageTable = () => {
-    if (isImageLoading) {
+    if (isPromptLoading) {
         return (
             <div className="flex justify-center items-center p-8 text-indigo-500 bg-gray-50 rounded-lg">
                 <Loader2 className="w-6 h-6 mr-3 animate-spin" />
-                Loading images... (n8n is fetching and uploading)
+                Loading prompts from Supabase...
             </div>
         );
     }
@@ -397,7 +324,7 @@ const ProductCreatePage = () => {
         return (
             <div className="p-6 bg-yellow-100 text-yellow-800 rounded-lg flex items-center space-x-2">
                 <Info className="w-5 h-5" />
-                <p>No images loaded. Check your n8n flow and configuration.</p>
+                <p>No prompts loaded. Check your Supabase configuration.</p>
             </div>
         );
     }
@@ -415,10 +342,13 @@ const ProductCreatePage = () => {
                                 Image
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Filename
+                                Image File Name
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Style
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Aspect Ratio
                             </th>
                             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                                 Score
@@ -441,12 +371,14 @@ const ProductCreatePage = () => {
                                 {/* Image */}
                                 <td className="px-4 py-2">
                                     <div 
-                                        className="w-16 h-16 rounded-lg overflow-hidden cursor-pointer shadow-md border border-gray-200 hover:border-indigo-500 transition duration-150"
-                                        onClick={() => handleImageClick(img.url)}
+                                        className={`w-16 h-16 rounded-lg overflow-hidden shadow-md border border-gray-200 transition duration-150 ${
+                                          img.url ? 'cursor-pointer hover:border-indigo-500' : 'bg-gray-100'
+                                        }`}
+                                        onClick={() => img.url && openImagePreview(img.url)}
                                     >
                                         <img
-                                            src={img.url}
-                                            alt={`Product Image ${img.id}`}
+                                            src={img.url || "https://placehold.co/100x100/e5e7eb/6b7280?text=No+Image"}
+                                            alt={img.url ? `Product Image ${img.id}` : 'No preview available'}
                                             className="w-full h-full object-cover"
                                             onError={(e) => { e.target.onerror = null; e.target.src = "https://placehold.co/100x100/fecaca/991b1b?text=Err" }}
                                         />
@@ -459,6 +391,10 @@ const ProductCreatePage = () => {
                                 {/* Style - Non-bold style */}
                                 <td className="px-4 py-2 text-sm text-gray-700">
                                     {img.style}
+                                </td>
+                                {/* Aspect Ratio */}
+                                <td className="px-4 py-2 text-sm text-gray-700">
+                                    {img.aspectRatio}
                                 </td>
                                 {/* Score */}
                                 <td className="px-4 py-2 text-right text-base font-semibold">
@@ -502,7 +438,12 @@ const ProductCreatePage = () => {
                 },
                 body: JSON.stringify({
                     listingData: {
-                        images: selectedImages.map(img => img.url),
+                        prompts: selectedImages.map(img => ({
+                          image_file_name: img.filename,
+                          style: img.style,
+                          aspect_ratio: img.aspectRatio,
+                          score: img.score,
+                        })),
                         aspectRatio,
                         productTypes,
                         // Include other product data here
@@ -708,6 +649,15 @@ const ProductCreatePage = () => {
                             )}
                         </div>
                     </label>
+                    {!isPlaceholderImage(originalPhotoUrl, ['Upload+Original+Photo']) && (
+                        <button
+                            type="button"
+                            onClick={() => openImagePreview(originalPhotoUrl)}
+                            className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                        >
+                            Preview image
+                        </button>
+                    )}
                 </div>
                 
                 {/* Modified Photo Box */}
@@ -725,6 +675,15 @@ const ProductCreatePage = () => {
                             <img src={modifiedPhotoUrl} alt="Modified" className="w-full h-full object-cover"/>
                         )}
                     </div>
+                    {!isPlaceholderImage(modifiedPhotoUrl, ['A.I.+Output', 'AI+ERROR']) && (
+                        <button
+                            type="button"
+                            onClick={() => openImagePreview(modifiedPhotoUrl)}
+                            className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                        >
+                            Preview image
+                        </button>
+                    )}
                 </div>
             </div>
             
@@ -857,6 +816,15 @@ const ProductCreatePage = () => {
                             )}
                         </div>
                     </label>
+                    {!isPlaceholderImage(upscaleOriginalUrl, ['Low+Res+Input']) && (
+                        <button
+                            type="button"
+                            onClick={() => openImagePreview(upscaleOriginalUrl)}
+                            className="mt-3 text-sm font-medium text-red-600 hover:text-red-700"
+                        >
+                            Preview image
+                        </button>
+                    )}
                 </div>
                 
                 {/* Upscaled Photo Box */}
@@ -872,6 +840,15 @@ const ProductCreatePage = () => {
                             <img src={upscaleModifiedUrl} alt="Upscaled High Res" className="w-full h-full object-cover"/>
                         )}
                     </div>
+                    {!isPlaceholderImage(upscaleModifiedUrl, ['A.I.+Output', 'AI+ERROR']) && (
+                        <button
+                            type="button"
+                            onClick={() => openImagePreview(upscaleModifiedUrl)}
+                            className="mt-3 text-sm font-medium text-red-600 hover:text-red-700"
+                        >
+                            Preview image
+                        </button>
+                    )}
                 </div>
             </div>
             
@@ -914,91 +891,6 @@ const ProductCreatePage = () => {
   };
 
 
-  // --- Category Updater Table Component ---
-  const CategoryUpdaterTable = () => {
-    
-    if (isCategoryLoading) {
-      return (
-        <div className="flex justify-center items-center p-4 text-indigo-500">
-          <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-          Loading prompts from Supabase...
-        </div>
-      );
-    }
-    
-    return (
-      <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="w-1/2 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Topic
-              </th>
-              <th className="w-1/2 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
-                Style Split
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {imageCategories.map((item, index) => (
-              <tr key={item.id || index} className="hover:bg-indigo-50/30 transition duration-100">
-                <td className="px-4 py-1">
-                  <input
-                    type="text"
-                    value={item.topic}
-                    onChange={(e) => handleCategoryChange(index, 'topic', e.target.value)}
-                    placeholder="Topic Name"
-                    className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
-                  />
-                </td>
-                <td className="px-4 py-1 border-l border-gray-100">
-                  <input
-                    type="text"
-                    value={item.styleSplit}
-                    onChange={(e) => handleCategoryChange(index, 'styleSplit', e.target.value)}
-                    placeholder="Style Split (e.g., 70% Watercolor)"
-                    className="w-full text-sm p-1 border border-gray-200 rounded-md focus:ring-indigo-300 focus:border-indigo-300 transition duration-100"
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        
-        <div className="p-3 bg-gray-50 flex justify-end border-t border-gray-200">
-          {/* Button to add a new row locally for a new configuration */}
-          <button
-            onClick={() => setImageCategories(prev => [...prev, { topic: '', styleSplit: '', id: crypto.randomUUID() }])}
-            type="button"
-            className="px-4 py-1.5 bg-gray-400 text-white text-sm font-semibold rounded-full hover:bg-gray-500 transition duration-150 shadow-md flex items-center mr-3"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add New Row
-          </button>
-        
-          <button
-            onClick={handleCategoryUpdate}
-            type="button"
-            disabled={isCategoryUpdating}
-            // Update Prompts Button (Primary Indigo)
-            className="px-5 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-full hover:bg-indigo-700 transition duration-150 shadow-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isCategoryUpdating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <ListChecks className="w-4 h-4 mr-2" />
-            )}
-            {isCategoryUpdating ? 'Updating...' : 'Save Changes'}
-          </button>
-        </div>
-        {categoryError && (
-            <div className={`p-3 text-xs rounded-b-lg ${categoryError.includes('Successfully') ? 'text-green-800 bg-green-50' : 'text-red-600 bg-red-50'}`}>
-                {categoryError}
-            </div>
-        )}
-      </div>
-    );
-  };
   // ------------------------------------------------
 
   return (
@@ -1017,8 +909,8 @@ const ProductCreatePage = () => {
         )}
 
         <form onSubmit={handleSubmit}>
-            {/* Section 1: Initial Image Fetch & Listing Configuration */}
-            <Section icon={Image} title="1. Initial Image Processing & Listing Config">
+            {/* Section 1: Prompt Selection & Listing Configuration */}
+            <Section icon={Image} title="1. Prompt Selection & Listing Config">
                 <ImageTable />
                 <ListingConfigurationControls />
             </Section>
@@ -1033,10 +925,6 @@ const ProductCreatePage = () => {
                 <UpscalePhotosSection />
             </Section>
 
-            {/* Section 4: Image Prompt Updater (Supabase Config) */}
-            <Section icon={Tag} title="4. Image Prompt Configuration (Supabase)">
-                <CategoryUpdaterTable />
-            </Section>
         </form>
       </div>
       <ImageModal 
@@ -1047,13 +935,5 @@ const ProductCreatePage = () => {
     </div>
   );
 };
-
-// Add Plus icon for the new 'Add Row' button
-const Plus = ({ className }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-    </svg>
-);
 
 export default ProductCreatePage;
