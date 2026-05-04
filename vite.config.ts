@@ -4,14 +4,14 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
-    fs: {
-      allow: ["./client"],
-      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**"],
-    },
+server: {
+  host: "::",
+  port: 8080,
+  fs: {
+    allow: [path.resolve(__dirname), path.resolve(__dirname, "./client")],
+    deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**"],
   },
+},
   build: {
     outDir: "dist/spa",
   },
