@@ -28,7 +28,7 @@ jobs:
       - name: Build and push immutable worker image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: video-ltx25-serverless
           file: video-ltx25-serverless/Dockerfile
           platforms: linux/amd64
           push: true
