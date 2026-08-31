@@ -1,0 +1,13 @@
+{
+  "input": {
+    "action": "text_to_video",
+    "prompt": "Photorealistic handheld smartphone video of a golden retriever running happily along a quiet Gulf Coast beach at sunrise. The dog runs toward the camera through shallow water, splashing naturally. Soft orange morning light, realistic wet fur, physically accurate motion, subtle handheld camera movement, natural ocean waves and ambient beach sound, no text, no logos.",
+    "duration": 8,
+    "width": 704,
+    "height": 1280,
+    "fps": 24,
+    "seed": 20260831,
+    "generate_audio": true
+  }
+}
+

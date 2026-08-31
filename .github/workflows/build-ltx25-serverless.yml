@@ -1,0 +1,41 @@
+name: Build isolated LTX-2.5 Serverless worker
+
+on:
+  push:
+    branches:
+      - codex/create2-ltx25-t2v
+    paths:
+      - "video-ltx25-serverless/**"
+      - ".github/workflows/build-ltx25-serverless.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push immutable worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: video-ltx25-serverless/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/create2-ltx25-t2v:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/create2-ltx25-t2v:latest
+      - name: Make GHCR package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api --method PATCH /user/packages/container/create2-ltx25-t2v/visibility -f visibility=public || true
