@@ -1,32 +1,105 @@
 from __future__ import annotations
-import copy, json
+
+import copy
+import json
+import os
 from pathlib import Path
 from typing import Any
-WORKFLOW_FILES={"text_to_video":"workflow_api.json","image_to_video":"workflow_i2v_api.json","first_last_frame_to_video":"workflow_flf2v_api.json"}
-WORKFLOW_IDS={"text_to_video":"07824bbb-6672-4bb0-ac36-4313a519e35b","image_to_video":"07824bbb-6672-4bb0-ac36-4313a519e35b","first_last_frame_to_video":"0112e9af-5129-48ba-af78-92c40ac40b40"}
-def workflow_id(action:str)->str:return WORKFLOW_IDS[action]
-def _load(action:str)->dict[str,Any]:return copy.deepcopy(json.loads(Path(__file__).with_name(WORKFLOW_FILES[action]).read_text(encoding="utf-8")))
-def _set_audio(w:dict[str,Any],node:str,link:list[Any],enabled:bool)->None:
-    if enabled:w[node]["inputs"]["audio"]=link
-    else:w[node]["inputs"].pop("audio",None)
-def build_workflow(*,action:str,prompt:str,duration:int,width:int,height:int,fps:int,seed:int,generate_audio:bool,image_filenames:dict[str,str]|None=None)->dict[str,Any]:
-    w=_load(action); images=image_filenames or {}
-    if action in ("text_to_video","image_to_video"):
-        w["398:364"]["inputs"]["text"]=prompt; w["398:361"]["inputs"]["value"]=fps; w["398:372"]["inputs"]["value"]=width; w["398:360"]["inputs"]["value"]=height; w["398:362"]["inputs"]["value"]=duration; w["398:339"]["inputs"]["noise_seed"]=seed
-        if action=="image_to_video":w["input:first_image"]["inputs"]["image"]=images.get("first_image","__FIRST_IMAGE__")
-        _set_audio(w,"398:370",["398:358",0],generate_audio)
-    elif action=="first_last_frame_to_video":
-        w["251:222"]["inputs"]["text"]=prompt; w["251:205"]["inputs"]["value"]=fps; w["251:215"]["inputs"]["value"]=width; w["251:216"]["inputs"]["value"]=height; w["251:198"]["inputs"]["value"]=duration; w["251:196"]["inputs"]["noise_seed"]=seed
-        w["input:first_image"]["inputs"]["image"]=images.get("first_image","__FIRST_IMAGE__"); w["input:last_image"]["inputs"]["image"]=images.get("last_image","__LAST_IMAGE__")
-        for node in ("251:213","251:214"):w[node]["inputs"]["resize_type"].update(width=width,height=height)
-        _set_audio(w,"251:218",["251:220",0],generate_audio)
-    else:raise ValueError(f"unsupported action: {action}")
-    return w
-def validate_workflow_values(w:dict[str,Any],e:dict[str,Any])->None:
-    if e["action"] in ("text_to_video","image_to_video"):
-        p,wi,he,fp,du,se,out="398:364","398:372","398:360","398:361","398:362","398:339","398:370"; audio=["398:358",0]
-        if e["action"]=="image_to_video":assert w["input:first_image"]["inputs"]["image"]==e["first_image"]
+
+OFFICIAL_WORKFLOW_COMMIT = os.environ.get(
+    "LTX25_OFFICIAL_WORKFLOW_COMMIT",
+    "6820fe9feeae5bfc230c77a076052d78eb1889b8",
+)
+WORKFLOW_API = Path("/app/workflow_api.json")
+
+
+def workflow_id(action: str) -> str:
+    if action not in {"text_to_video", "image_to_video"}:
+        raise ValueError("the official two-stage workflow supports text_to_video and image_to_video")
+    return OFFICIAL_WORKFLOW_COMMIT
+
+
+def _load_template() -> dict[str, Any]:
+    return copy.deepcopy(json.loads(WORKFLOW_API.read_text(encoding="utf-8")))
+
+
+def _set_required(workflow: dict[str, Any], node_id: str, name: str, value: Any) -> None:
+    node = workflow.get(node_id)
+    if not isinstance(node, dict):
+        raise RuntimeError(f"official API workflow node {node_id!r} is missing")
+    inputs = node.get("inputs")
+    if not isinstance(inputs, dict) or name not in inputs:
+        raise RuntimeError(f"official API workflow node {node_id!r} does not expose input {name!r}")
+    inputs[name] = value
+
+
+def build_workflow(
+    *,
+    action: str,
+    prompt: str,
+    duration: int,
+    width: int,
+    height: int,
+    fps: int,
+    seed: int,
+    generate_audio: bool,
+    image_filename: str | None = None,
+    template: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if action not in {"text_to_video", "image_to_video"}:
+        raise ValueError(
+            "first_last_frame_to_video is intentionally not implemented: "
+            "the official T2V/I2V graph does not expose that conditioning path"
+        )
+    if not generate_audio:
+        raise ValueError("generate_audio=false is not supported by the official joint video/audio graph")
+
+    workflow = copy.deepcopy(template) if template is not None else _load_template()
+
+    # The official graph's stage-2 latent spatial upscaler doubles dimensions.
+    # Public dimensions are final dimensions; stage 1 receives half-size values.
+    _set_required(workflow, "5508", "value", prompt)
+    _set_required(workflow, "5512", "value", float(duration))
+    _set_required(workflow, "5511", "value", float(fps))
+    _set_required(workflow, "5514:3059", "width", width // 2)
+    _set_required(workflow, "5514:3059", "height", height // 2)
+    _set_required(workflow, "5014:4988", "value", seed)
+    _set_required(workflow, "5014:5506", "value", action == "image_to_video")
+
+    if action == "image_to_video":
+        if not image_filename:
+            raise ValueError("image_filename is required for image_to_video")
+        _set_required(workflow, "2004", "image", image_filename)
     else:
-        p,wi,he,fp,du,se,out="251:222","251:215","251:216","251:205","251:198","251:196","251:218"; audio=["251:220",0]
-        assert w["input:first_image"]["inputs"]["image"]==e["first_image"]; assert w["input:last_image"]["inputs"]["image"]==e["last_image"]; assert w["251:213"]["inputs"]["resize_type"]["width"]==e["width"]; assert w["251:213"]["inputs"]["resize_type"]["height"]==e["height"]
-    assert w[p]["inputs"]["text"]==e["prompt"]; assert w[wi]["inputs"]["value"]==e["width"]; assert w[he]["inputs"]["value"]==e["height"]; assert w[fp]["inputs"]["value"]==e["fps"]; assert w[du]["inputs"]["value"]==e["duration"]; assert w[se]["inputs"]["noise_seed"]==e["seed"]; assert w[out]["inputs"].get("audio")== (audio if e["generate_audio"] else None)
+        _set_required(workflow, "2004", "image", "")
+
+    _set_required(workflow, "4852", "filename_prefix", "ltx25/create2")
+    return workflow
+
+
+def validate_workflow_values(
+    workflow: dict[str, Any],
+    *,
+    action: str,
+    prompt: str,
+    duration: int,
+    width: int,
+    height: int,
+    fps: int,
+    seed: int,
+    generate_audio: bool,
+    image_filename: str | None = None,
+) -> None:
+    assert workflow["5508"]["inputs"]["value"] == prompt
+    assert workflow["5512"]["inputs"]["value"] == float(duration)
+    assert workflow["5511"]["inputs"]["value"] == float(fps)
+    assert workflow["5514:3059"]["inputs"]["width"] == width // 2
+    assert workflow["5514:3059"]["inputs"]["height"] == height // 2
+    assert workflow["5014:4988"]["inputs"]["value"] == seed
+    assert workflow["5014:5506"]["inputs"]["value"] == (action == "image_to_video")
+    assert workflow["4852"]["inputs"]["filename_prefix"] == "ltx25/create2"
+    if action == "image_to_video":
+        assert workflow["2004"]["inputs"]["image"] == image_filename
+    else:
+        assert workflow["2004"]["inputs"]["image"] == ""
+    assert generate_audio is True
