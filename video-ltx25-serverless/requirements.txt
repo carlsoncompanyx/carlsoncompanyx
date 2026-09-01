@@ -1,4 +1,4 @@
 runpod
 requests
 websocket-client
-
+comfy-cli==1.19.0
