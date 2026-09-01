@@ -1,12 +1,9 @@
 # Create 2.0 Fast Generative Video — LTX-2.5 Serverless
 
-Standalone RunPod Serverless worker for provider-independent LTX-2.5 text-to-video generation.
+This isolated worker wraps the official Lightricks LTX-2.5 two-stage ComfyUI workflow for text-to-video and optional first-frame image-to-video. The ComfyUI graph stays private; the MovieBuilder 1.0 endpoint is not referenced or changed.
 
-This worker exposes a small logical contract and keeps the ComfyUI workflow internal. It uses the official ComfyUI LTX-2.5 text-to-video graph with prompt enhancement disabled. The MovieBuilder 1.0 endpoint is not referenced by this repository or its deployment configuration.
+## API
 
-## API contract
-
-```json
 {
   "input": {
     "action": "text_to_video",
@@ -19,36 +16,34 @@ This worker exposes a small logical contract and keeps the ComfyUI workflow inte
     "generate_audio": true
   }
 }
-```
 
-Dimensions must be positive multiples of 32. `720x1280` is rejected by the worker because the official LTX latent grid requires dimensions divisible by 32; the nearest vertical configuration used by the acceptance test is `704x1280`, with aspect ratio preserved and no stretch.
+For image-to-video, use action=image_to_video and add a base64 or data-URL image. The official two-stage graph always produces synchronized video and audio, so generate_audio must remain true. Start/end-frame conditioning is rejected until an official workflow for that mode is separately validated.
 
-## Model files
+The public width and height are final dimensions. Because the official graph performs a 2x latent spatial upscale, the wrapper sends half-size, 32-aligned dimensions to stage 1. Final dimensions must be divisible by 64; 704x1280 is the supported vertical acceptance size. Duration is converted inside the official graph to an LTX-valid frame count of 1 plus a multiple of 8.
 
-The endpoint is configured for the gated `Lightricks/LTX-2.5` repository. RunPod's Hugging Face model cache is resolved into ComfyUI model directories at worker boot without copying the files:
+## Source of truth
 
-- `diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors`
-- `text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors`
-- `vae/ltx-2.5-video-vae-bf16.safetensors`
-- `vae/ltx-2.5-audio-vae-bf16.safetensors`
-- `latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors`
+- Official workflow file: official/LTX-2.5_T2V_I2V_Two_Stage_Distilled.json
+- Official Lightricks ComfyUI-LTXVideo revision: 15d09abb5a187a8dcaea2fc31fe51ee96e6c9d0d
+- Official workflow source revision recorded as: 6820fe9feeae5bfc230c77a076052d78eb1889b8
+- ComfyUI: pinned stable v0.32.0, commit c2bcbecd82ec5ae66594340b395c24ef0217b238
 
-The optional `Comfy-Org/gemma-4` prompt-enhancer model is not used or cached.
+The remote image build starts this pinned ComfyUI, installs the pinned official Lightricks node pack, queries /object_info, and converts the vendored UI workflow with ComfyUI's maintained comfy-cli converter. The build fails if any resulting API class_type is absent.
 
-## Build and deploy
+## Models and storage
 
-The Dockerfile pins the official RunPod ComfyUI base image. Build and publish the image to an approved registry, then create a new queue endpoint with:
+The official 2.5 graph requires:
 
-- minimum workers: `0`
-- maximum workers: `1`
-- no network volume
-- `MODEL_NAME=Lightricks/LTX-2.5`
-- `HF_TOKEN={{ RUNPOD_SECRET_HF_TOKEN }}` (secret reference only)
+- diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors
+- text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors
+- vae/ltx-2.5-video-vae-bf16.safetensors
+- vae/ltx-2.5-audio-vae-bf16.safetensors
+- latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
 
-The endpoint must be created independently from all existing endpoints. The token must never be placed in source, image layers, workflow JSON, or logs.
+RunPod's Hugging Face cache is mapped into those ComfyUI folders with symlinks at worker boot. No weights are baked into the image and no network volume is attached. The optional Comfy-Org/gemma-4 prompt-enhancer model is not mapped or loaded.
 
-## Verification
+The official workflow uses BF16. The existing INT8 ConvRot checkpoint is not substituted: the official graph does not select it, and the official LTXVideo Q8 path requires an additional Q8 patching node/kernel path that would change the graph.
 
-`tests/test_parameterization.py` validates deliberate workflow-node updates. `acceptance_request.json` is the live acceptance input. `acceptance_test.py` submits asynchronously, records queue/cold/warm timing, decodes base64 MP4 output, and runs `ffprobe`.
+## Remote build
 
-
+GitHub Actions/GHCR builds the image remotely from this subtree. The Windows PC is used only for source/Git/API work; Docker is not required locally.
