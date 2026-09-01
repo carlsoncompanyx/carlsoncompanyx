@@ -33,7 +33,8 @@ RUN set -eux; \
     git clone --filter=blob:none --no-checkout https://github.com/Lightricks/ComfyUI-LTXVideo.git /comfyui/custom_nodes/ComfyUI-LTXVideo; \
     git -C /comfyui/custom_nodes/ComfyUI-LTXVideo fetch --depth 1 origin "${LTXVIDEO_REVISION}"; \
     git -C /comfyui/custom_nodes/ComfyUI-LTXVideo checkout --detach "${LTXVIDEO_REVISION}"; \
-    python -m pip install --no-cache-dir -r /comfyui/custom_nodes/ComfyUI-LTXVideo/requirements.txt
+    python -m pip install --no-cache-dir -r /comfyui/custom_nodes/ComfyUI-LTXVideo/requirements.txt; \
+    python -m pip install --no-cache-dir "kornia==0.7.4"
 
 COPY requirements.txt /app/requirements.txt
 RUN python -m pip install --no-cache-dir -r /app/requirements.txt
