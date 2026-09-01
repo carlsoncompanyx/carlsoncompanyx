@@ -1,6 +1,12 @@
 name: Build isolated LTX-2.5 Serverless worker
 
 on:
+  push:
+    branches:
+      - codex/create2-ltx25-t2v
+    paths:
+      - "video-ltx25-serverless/**"
+      - ".github/workflows/build-ltx25-serverless.yml"
   workflow_dispatch:
 
 permissions:
@@ -20,6 +26,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push immutable worker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: video-ltx25-serverless
@@ -29,6 +36,11 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/create2-ltx25-t2v:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/create2-ltx25-t2v:latest
+      - name: Re-run official workflow preflight against pushed image
+        run: |
+          docker run --rm --entrypoint python \
+            ghcr.io/${{ github.repository_owner }}/create2-ltx25-t2v@${{ steps.build.outputs.digest }} \
+            /app/export_official_workflow.py
       - name: Make GHCR package public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
