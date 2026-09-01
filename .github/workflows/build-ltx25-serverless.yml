@@ -1,12 +1,6 @@
 name: Build isolated LTX-2.5 Serverless worker
 
 on:
-  push:
-    branches:
-      - codex/create2-ltx25-t2v
-    paths:
-      - "video-ltx25-serverless/**"
-      - ".github/workflows/build-ltx25-serverless.yml"
   workflow_dispatch:
 
 permissions:
